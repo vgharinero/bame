@@ -1,39 +1,45 @@
-import type { EngineContext, GameDefinition, ReduceResult } from "./types";
-import { validateTurn } from "./validation";
-
-export type ApplyActionResult<State> =
-    | { success: true; result: ReduceResult<State> }
-    | { success: false; error: string };
+import { produce } from 'immer'; // Optional, but recommended for clean reducers
+import type { BaseGameState, GameAction, EngineContext, GameDefinition } from './types';
 
 /**
- * Apply an action to the game state with full validation.
- * Orchestrates: turn validation → action parsing → reduce
+ * Applies a single action to the state and returns the new state.
+ * Throws if the move is invalid.
  */
-export const applyAction = <State, Action>(
-    game: GameDefinition<State, Action>,
-    state: State,
-    currentTurnActorId: string,
-    actorId: string,
-    rawAction: unknown
-): ApplyActionResult<State> => {
-    // 1. Validate turn
-    const turnCheck = validateTurn(actorId, currentTurnActorId);
-    if (!turnCheck.valid) {
-        return { success: false, error: turnCheck.reason };
+export const processAction = <S extends BaseGameState, A extends GameAction>(
+    def: GameDefinition<S, A>,
+    state: S,
+    action: A,
+    context: EngineContext
+) => {
+    if (state.status === 'finished') throw new Error("Game is over.");
+    if (state.turn !== action.playerId) throw new Error("Not your turn!");
+
+    const nextState = produce(state, (draft: S) => {
+        return def.reducer(draft, action, context);
+    });
+
+    if (def.isGameOver(nextState)) {
+        return {
+            ...nextState,
+            status: 'finished'
+        };
     }
 
-    // 2. Parse action
-    let action: Action;
-    try {
-        action = game.parseAction(rawAction);
-    } catch (e) {
-        return { success: false, error: e instanceof Error ? e.message : "Invalid action" };
-    }
+    return nextState;
+}
 
-    // 3. Apply reduce
-    const ctx: EngineContext = { actorId, now: Date.now() };
-    const result = game.reduce(state, action, ctx);
-
-    return { success: true, result };
-};
-
+/**
+ * Replays a list of actions from an initial state to get the final state.
+ * Useful for loading a game from the database (Event Sourcing).
+ */
+export const computeState = <S extends BaseGameState, A extends GameAction>(
+    def: GameDefinition<S, A>,
+    initialState: S,
+    history: A[],
+    context: EngineContext
+) => {
+    return history.reduce(
+        (state, action) => processAction(def, state, action, context),
+        initialState
+    );
+}

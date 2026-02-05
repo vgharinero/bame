@@ -17,5 +17,8 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "immer": "^11.1.3"
   }
 }
