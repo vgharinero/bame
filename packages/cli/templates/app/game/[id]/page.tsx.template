@@ -1,0 +1,70 @@
+"use client";
+
+import { useGame } from "@bame/next-supabase";
+import { useParams } from "next/navigation";
+
+export default function GamePage() {
+    const { id } = useParams<{ id: string }>();
+    const { game, loading, error } = useGame(id);
+
+    if (loading) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-xl">Loading game...</div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-xl text-red-600">Error: {error}</div>
+            </div>
+        );
+    }
+
+    if (!game) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-xl">Game not found</div>
+            </div>
+        );
+    }
+
+    return (
+        <div className="min-h-screen p-8">
+            <h1 className="text-3xl font-bold mb-8">Game</h1>
+            
+            <div className="max-w-2xl mx-auto">
+                <div className="p-6 border rounded-lg mb-6">
+                    <h2 className="text-xl font-semibold mb-4">Game State</h2>
+                    <pre className="bg-gray-100 p-4 rounded overflow-auto text-sm">
+                        {JSON.stringify(game.state, null, 2)}
+                    </pre>
+                </div>
+                
+                <div className="p-6 border rounded-lg">
+                    <h2 className="text-xl font-semibold mb-4">Game Info</h2>
+                    <dl className="space-y-2">
+                        <div className="flex justify-between">
+                            <dt className="text-gray-600">Status:</dt>
+                            <dd className="font-medium">{game.status}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                            <dt className="text-gray-600">Version:</dt>
+                            <dd className="font-medium">{game.state_version}</dd>
+                        </div>
+                        <div className="flex justify-between">
+                            <dt className="text-gray-600">Current Turn:</dt>
+                            <dd className="font-medium">{game.current_turn_user_id || "N/A"}</dd>
+                        </div>
+                    </dl>
+                </div>
+                
+                {/* TODO: Add your game UI components here */}
+                {/* Use useSubmitAction hook to submit moves */}
+            </div>
+        </div>
+    );
+}
+

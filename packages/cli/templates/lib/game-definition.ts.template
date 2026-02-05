@@ -1,0 +1,51 @@
+import type { GameDefinition } from "@bame/core";
+
+// Define your game state shape
+// Note: State must be JSON-serializable (objects, arrays, strings, numbers, booleans, null)
+type MyGameState = {
+    players: string[];
+    currentPlayerIndex: number;
+    // Add your game state here
+};
+
+// Define your action types
+type MyGameAction =
+    | { type: "MOVE"; payload: { /* ... */ } }
+    // Add your actions here
+    ;
+
+export const myGame: GameDefinition<MyGameState, MyGameAction> = {
+    parseAction(input: unknown): MyGameAction {
+        // Validate and parse incoming action
+        // Tip: Use Zod for robust validation
+        return input as MyGameAction;
+    },
+
+    createInitialState({ playerIds }): MyGameState {
+        return {
+            players: playerIds,
+            currentPlayerIndex: 0,
+            // Initialize your game state
+        };
+    },
+
+    reduce(state, action, ctx) {
+        // Handle actions and return new state
+        // The engine handles serialization automatically
+        switch (action.type) {
+            case "MOVE": {
+                const nextPlayerIndex = (state.currentPlayerIndex + 1) % state.players.length;
+                return {
+                    state: { 
+                        ...state,
+                        currentPlayerIndex: nextPlayerIndex,
+                    },
+                    nextTurnActorId: state.players[nextPlayerIndex],
+                    status: "active",
+                };
+            }
+            default:
+                return { state, nextTurnActorId: ctx.actorId, status: "active" };
+        }
+    },
+};
