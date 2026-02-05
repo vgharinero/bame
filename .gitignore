@@ -1,0 +1,26 @@
+# dependencies (all packages)
+**/node_modules/
+
+# build outputs
+**/dist/
+**/build/
+**/out/
+**/.next/
+**/.turbo/
+**/.cache/
+
+# pnpm / tooling
+.pnpm-debug.log*
+**/.pnpm-debug.log*
+.pnpm-store/
+**/.pnpm-store/
+**/coverage/
+
+# TypeScript
+**/*.tsbuildinfo
+
+# logs / misc
+*.log
+.DS_Store
+.env
+.env.*
