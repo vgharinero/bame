@@ -19,9 +19,9 @@ export interface UseLobbyReturn<TConfig extends object = object> {
 	refetch: () => Promise<void>;
 }
 
-export function useLobby<TConfig extends object = object>(
+export const useLobby = <TConfig extends object = object>(
 	lobbyId?: string,
-): UseLobbyReturn<TConfig> {
+): UseLobbyReturn<TConfig> => {
 	const { user } = useAuth();
 	const { lobbyStorage, realtimeStorage } = useStorage();
 
@@ -114,4 +114,4 @@ export function useLobby<TConfig extends object = object>(
 		startGame,
 		refetch: fetchLobby,
 	};
-}
+};

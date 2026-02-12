@@ -32,7 +32,7 @@ export interface UseGameReturn<
 	refetch: () => Promise<void>;
 }
 
-export function useGame<
+export const useGame = <
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
@@ -40,7 +40,7 @@ export function useGame<
 	TPhaseData extends object = object,
 >(
 	gameId?: string,
-): UseGameReturn<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData> {
+): UseGameReturn<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData> => {
 	const { user } = useAuth();
 	const { gameStorage, realtimeStorage } = useStorage();
 
@@ -134,4 +134,4 @@ export function useGame<
 		setOptimisticState: setOptimisticGame,
 		refetch: fetchGame,
 	};
-}
+};

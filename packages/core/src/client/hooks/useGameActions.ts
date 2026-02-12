@@ -1,4 +1,3 @@
-import { produce } from 'immer';
 import { useCallback, useState } from 'react';
 import type { Action } from '../../engine/types/action';
 import type { GameEngine } from '../../engine/types/game-engine';
@@ -17,7 +16,7 @@ export interface UseGameActionsReturn<
 	error: Error | null;
 }
 
-export function useGameActions<
+export const useGameActions = <
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
@@ -46,7 +45,7 @@ export function useGameActions<
 	onOptimisticUpdate: (
 		state: GameState<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData>,
 	) => void,
-): UseGameActionsReturn<TActionType, TActionPayload> {
+): UseGameActionsReturn<TActionType, TActionPayload> => {
 	const { user } = useAuth();
 	const { gameStorage } = useStorage();
 
@@ -69,39 +68,33 @@ export function useGameActions<
 				timestamp: Date.now(),
 			};
 
-			// Store original state for rollback
 			const previousState = currentState;
 
 			try {
 				setIsApplying(true);
 				setError(null);
 
-				// 1. Client-side validation
-				const isValid = gameImplementation.validateAction(
-					currentState,
-					fullAction,
-				);
-				if (!isValid) {
-					throw new Error('Invalid action - failed client validation');
+				// 1. Validate
+				if (!gameImplementation.validateAction(currentState, fullAction)) {
+					throw new Error('Invalid action');
 				}
 
-				// 2. Apply action optimistically
+				// 2. Apply optimistically
 				const result = gameImplementation.applyAction(currentState, fullAction);
 				if (!result.success || !result.newState) {
-					throw new Error(result.error || 'Action application failed');
+					throw new Error(result.error || 'Failed to apply action');
 				}
 
-				// 3. Update UI immediately (optimistic)
+				// 3. Update UI immediately
 				onOptimisticUpdate(result.newState);
 
-				// 4. Send to server for validation and broadcast
+				// 4. Send to server
 				await gameStorage.saveAction?.(gameId, fullAction);
 
-				// 5. Server will validate and broadcast canonical state
-				// If server state differs, realtime subscription will overwrite
+				// Server validates & broadcasts
+				// Realtime subscription will overwrite with canonical state
 			} catch (err) {
-				// 6. Rollback on error
-				onOptimisticUpdate(previousState);
+				onOptimisticUpdate(previousState); // Rollback
 				setError(err as Error);
 				throw err;
 			} finally {
