@@ -1,24 +1,24 @@
 {
-  "name": "@bame/cli",
-  "version": "0.1.0",
-  "type": "module",
-  "bin": {
-    "bame": "./dist/index.js"
-  },
-  "files": [
-    "dist",
-    "templates"
-  ],
-  "scripts": {
-    "build": "tsup src/index.ts --format esm --minify",
-    "clean": "rm -rf dist"
-  },
-  "dependencies": {
-    "@bame/core": "workspace:*",
-    "commander": "^12.0.0"
-  },
-  "devDependencies": {
-    "tsup": "^8.0.0",
-    "@types/node": "^20.19.32"
-  }
+	"name": "@bame/cli",
+	"version": "0.1.0",
+	"type": "module",
+	"bin": {
+		"bame": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"templates"
+	],
+	"scripts": {
+		"build": "tsup src/index.ts --format esm --minify",
+		"clean": "rm -rf dist"
+	},
+	"dependencies": {
+		"@bame/core": "workspace:*",
+		"commander": "^12.0.0"
+	},
+	"devDependencies": {
+		"tsup": "^8.0.0",
+		"@types/node": "^20.19.32"
+	}
 }

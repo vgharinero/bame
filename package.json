@@ -1,16 +1,20 @@
 {
-  "name": "bame",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
-  "scripts": {
-    "build": "pnpm -r build",
-    "dev": "pnpm -r --parallel dev"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "devDependencies": {
-    "typescript": "^5.0.0"
-  }
+	"name": "bame",
+	"version": "1.0.0",
+	"description": "",
+	"main": "index.js",
+	"scripts": {
+		"build": "pnpm -r build",
+		"dev": "pnpm -r --parallel dev",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"format": "biome format --write ."
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"devDependencies": {
+		"@biomejs/biome": "2.2.0",
+		"typescript": "^5.0.0"
+	}
 }
