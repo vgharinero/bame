@@ -8,6 +8,6 @@ export interface IProfileStorage {
 	handleGameEnd(result: {
 		winners: string[];
 		losers: string[];
-		draw?: boolean; // If true, everyone gets a draw
+		isDraw?: boolean; // If true, everyone gets a draw
 	}): Promise<void>;
 }

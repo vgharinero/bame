@@ -1,8 +1,10 @@
+'use client';
+
 import { useCallback, useEffect, useState } from 'react';
-import type { Lobby } from '../../engine/types/lobby';
+import type { GameEngine, Lobby } from '../../engine/types';
+import * as lobbyActions from '../../server/actions/lobby-actions';
 import type { LobbyRealtimeEvent } from '../../storage';
-import { useAuth } from '../context/AuthProvider';
-import { useStorage } from '../context/StorageProvider';
+import { useAuth, useStorage } from '../context';
 
 export interface UseLobbyReturn<TConfig extends object = object> {
 	lobby: Lobby<TConfig> | null;
@@ -14,7 +16,24 @@ export interface UseLobbyReturn<TConfig extends object = object> {
 	createLobby: (config: TConfig, maxPlayers: number) => Promise<Lobby<TConfig>>;
 	joinLobby: (lobbyId: string) => Promise<void>;
 	leaveLobby: () => Promise<void>;
-	startGame: () => Promise<string>; // Returns gameId
+	startGame: <
+		TPublicState extends object,
+		TPrivateState extends object,
+		TActionType extends string,
+		TActionPayload extends object,
+		TPhase extends string,
+		TPhaseData extends object,
+	>(
+		gameImplementation: GameEngine<
+			TConfig,
+			TPublicState,
+			TPrivateState,
+			TActionType,
+			TActionPayload,
+			TPhase,
+			TPhaseData
+		>,
+	) => Promise<string>; // Returns gameId
 
 	refetch: () => Promise<void>;
 }
@@ -23,7 +42,7 @@ export const useLobby = <TConfig extends object = object>(
 	lobbyId?: string,
 ): UseLobbyReturn<TConfig> => {
 	const { user } = useAuth();
-	const { lobbyStorage, realtimeStorage } = useStorage();
+	const { lobbyStorage, gameStorage, realtimeStorage } = useStorage();
 
 	const [lobby, setLobby] = useState<Lobby<TConfig> | null>(null);
 	const [isLoading, setIsLoading] = useState(false);
@@ -72,7 +91,9 @@ export const useLobby = <TConfig extends object = object>(
 	// Actions
 	const createLobby = async (config: TConfig, maxPlayers: number) => {
 		if (!user) throw new Error('Not authenticated');
-		const newLobby = await lobbyStorage.createLobby(
+		const newLobby = await lobbyActions.createLobby(
+			lobbyStorage,
+			realtimeStorage,
 			user.id,
 			config,
 			maxPlayers,
@@ -83,20 +104,49 @@ export const useLobby = <TConfig extends object = object>(
 
 	const joinLobby = async (id: string) => {
 		if (!user) throw new Error('Not authenticated');
-		await lobbyStorage.joinLobby(id, user.id);
-		await fetchLobby();
+		await lobbyActions.joinLobby(lobbyStorage, realtimeStorage, id, user.id);
+		// await fetchLobby(); // TODO: check if realtime handles it or not
 	};
 
 	const leaveLobby = async () => {
 		if (!user || !lobbyId) throw new Error('Invalid state');
-		await lobbyStorage.leaveLobby(lobbyId, user.id);
+		await lobbyActions.leaveLobby(
+			lobbyStorage,
+			realtimeStorage,
+			lobbyId,
+			user.id,
+		);
 		setLobby(null);
 	};
 
-	const startGame = async () => {
-		// This will be implemented in server actions
-		// For now, placeholder
-		throw new Error('startGame not implemented - handled by server action');
+	const startGame = async <
+		TPublicState extends object,
+		TPrivateState extends object,
+		TActionType extends string,
+		TActionPayload extends object,
+		TPhase extends string,
+		TPhaseData extends object,
+	>(
+		gameImplementation: GameEngine<
+			TConfig,
+			TPublicState,
+			TPrivateState,
+			TActionType,
+			TActionPayload,
+			TPhase,
+			TPhaseData
+		>,
+	) => {
+		if (!user || !lobbyId) throw new Error('Invalid state');
+		const gameId = await lobbyActions.startGame(
+			lobbyStorage,
+			gameStorage,
+			realtimeStorage,
+			gameImplementation,
+			lobbyId,
+			user.id,
+		);
+		return gameId;
 	};
 
 	const isHost = lobby?.hostId === user?.id;

@@ -1,7 +1,9 @@
+'use client';
+
 import { useCallback, useEffect, useState } from 'react';
-import type { Profile } from '../../engine/types/profile';
-import { useAuth } from '../context/AuthProvider';
-import { useStorage } from '../context/StorageProvider';
+import type { Profile } from '../../engine/types';
+import * as profileActions from '../../server/actions/profile-actions';
+import { useAuth, useStorage } from '../context';
 
 export interface UseProfileReturn {
 	profile: Profile | null;
@@ -46,7 +48,11 @@ export const useProfile = (): UseProfileReturn => {
 
 	const updateAvatar = async (avatarUrl: string) => {
 		if (!user) throw new Error('Not authenticated');
-		const updated = await profileStorage.updateAvatar(user.id, avatarUrl);
+		const updated = await profileActions.updateProfileAvatar(
+			profileStorage,
+			user.id,
+			avatarUrl,
+		);
 		setProfile(updated);
 	};
 

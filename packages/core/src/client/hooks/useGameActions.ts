@@ -1,9 +1,9 @@
+'use client';
+
 import { useCallback, useState } from 'react';
-import type { Action } from '../../engine/types/action';
-import type { GameEngine } from '../../engine/types/game-engine';
-import type { GameState } from '../../engine/types/game-state';
-import { useAuth } from '../context/AuthProvider';
-import { useStorage } from '../context/StorageProvider';
+import type { Action, GameEngine, GameState } from '../../engine/types';
+import * as gameActions from '../../server/actions/game-actions';
+import { useAuth, useStorage } from '../context';
 
 export interface UseGameActionsReturn<
 	TActionType extends string = string,
@@ -47,7 +47,7 @@ export const useGameActions = <
 	) => void,
 ): UseGameActionsReturn<TActionType, TActionPayload> => {
 	const { user } = useAuth();
-	const { gameStorage } = useStorage();
+	const { gameStorage, profileStorage, realtimeStorage } = useStorage();
 
 	const [isApplying, setIsApplying] = useState(false);
 	const [error, setError] = useState<Error | null>(null);
@@ -89,7 +89,14 @@ export const useGameActions = <
 				onOptimisticUpdate(result.newState);
 
 				// 4. Send to server
-				await gameStorage.saveAction?.(gameId, fullAction);
+				await gameActions.applyGameAction(
+					gameStorage,
+					profileStorage,
+					realtimeStorage,
+					gameImplementation,
+					gameId,
+					fullAction,
+				);
 
 				// Server validates & broadcasts
 				// Realtime subscription will overwrite with canonical state
@@ -107,6 +114,8 @@ export const useGameActions = <
 			currentState,
 			gameImplementation,
 			gameStorage,
+			profileStorage,
+			realtimeStorage,
 			onOptimisticUpdate,
 		],
 	);
@@ -116,4 +125,4 @@ export const useGameActions = <
 		isApplying,
 		error,
 	};
-}
+};

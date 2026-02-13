@@ -1,3 +1,5 @@
+'use client';
+
 import { useCallback, useEffect, useState } from 'react';
 import type { GameState } from '../../engine/types/game-state';
 import type { Player } from '../../engine/types/player';
