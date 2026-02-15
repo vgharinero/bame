@@ -4,7 +4,7 @@ export type LobbyStatus =
 	| 'waiting'
 	| 'ready'
 	| 'starting'
-	| 'started'
+	| 'transitioned'
 	| 'closed';
 
 export interface Lobby<TConfig extends object = object> {

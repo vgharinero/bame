@@ -12,18 +12,20 @@ export interface GameState<
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
+	TActionType extends string = string,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
 > {
-	gameId: string;
+	id: string;
 	status: GameStatus;
 
 	config: TConfig;
+	seed: string;
 
 	publicState: TPublicState;
 	players: Player<TPrivateState>[];
 
-	turn: TurnState<TPhase, TPhaseData>;
+	turn: TurnState<TActionType, TPhase, TPhaseData>;
 
 	winner?: string;
 
@@ -31,7 +33,4 @@ export interface GameState<
 	updatedAt: number;
 	startedAt?: number;
 	finishedAt?: number;
-
-	// For determinism
-	seed: string;
 }

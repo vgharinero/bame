@@ -1,11 +1,15 @@
-import type { LobbyMember } from '../engine/types';
-import type { Lobby, LobbyStatus } from '../engine/types/lobby';
-import type { LobbyMemberStatus } from '../engine/types/lobby-member';
+import type {
+	Lobby,
+	LobbyMember,
+	LobbyMemberStatus,
+	LobbyStatus,
+} from '../engine/types';
 
 export interface ILobbyStorage {
 	createLobby<TConfig extends object>(
 		hostId: string,
 		config: TConfig,
+		minPlayers: number,
 		maxPlayers: number,
 	): Promise<Lobby<TConfig>>;
 

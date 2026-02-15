@@ -1,5 +1,3 @@
-'use server';
-
 import type { GameEngine, Lobby, LobbyMember } from '../../engine/types';
 import type {
 	IGameStorage,
@@ -13,10 +11,16 @@ export const createLobby = async <TConfig extends object>(
 	realtime: IRealtimeStorage,
 	hostId: string,
 	config: TConfig,
+	minPlayers: number,
 	maxPlayers: number,
 ): Promise<Lobby<TConfig>> => {
 	// Create lobby
-	const lobby = await storage.createLobby(hostId, config, maxPlayers);
+	const lobby = await storage.createLobby(
+		hostId,
+		config,
+		minPlayers,
+		maxPlayers,
+	);
 
 	// Broadcast lobby created (for lobby lists)
 	await realtime.broadcastLobbyEvent(lobby.id, {

@@ -5,7 +5,7 @@ import type {
 	IRealtimeStorage,
 } from '../../storage';
 
-export async function transitionLobbyToGame<
+export const transitionLobbyToGame = async <
 	TConfig extends object,
 	TPublicState extends object,
 	TPrivateState extends object,
@@ -27,7 +27,7 @@ export async function transitionLobbyToGame<
 		TPhaseData
 	>,
 	lobbyId: string,
-): Promise<string> {
+): Promise<string> => {
 	// 1. Get lobby and validate
 	const lobby = await lobbyStorage.getLobby<TConfig>(lobbyId);
 	if (!lobby) throw new Error('Lobby not found');
@@ -42,31 +42,35 @@ export async function transitionLobbyToGame<
 
 	// 3. Initialize game state
 	const playerIds = lobby.members.map((m) => m.id);
-	const initialState = gameImplementation.initialize(
-		lobby.gameConfig,
-		playerIds,
-		seed,
-	);
+	const { publicState, initialPrivateStates, initialTurn } =
+		gameImplementation.initialize(lobby.gameConfig, playerIds, seed);
 
 	// Call RPC (this will be implemented in Supabase storage)
-	await gameStorage.transitionLobbyToGame?.(
+	await gameStorage.transitionLobbyToGameAtomically(
 		lobbyId,
-		gameId,
-		initialState,
+		publicState,
+		initialTurn.currentPlayerId,
+		initialTurn.phase,
+		initialTurn,
+		playerIds,
+		initialPrivateStates,
 		lobby.gameConfig,
 		seed,
 	);
 
 	// 7. Broadcast events
 	await realtimeStorage.broadcastLobbyEvent(lobbyId, {
-		type: 'lobby:started',
+		type: 'lobby:transitioned',
 		gameId: lobbyId,
 	});
 
-	await realtimeStorage.broadcastGameEvent(lobbyId, {
+	const game = await gameStorage.getGame(lobbyId);
+	if (!game) throw new Error('Game not found');
+
+	await realtimeStorage.broadcastGameEvent(game.id, {
 		type: 'game:state_updated',
-		state: { ...initialState, gameId: lobbyId }
+		state: game,
 	});
 
 	return lobbyId;
-}
+};

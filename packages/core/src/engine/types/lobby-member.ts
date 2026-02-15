@@ -4,6 +4,6 @@ export type LobbyMemberStatus = 'in_lobby' | 'leaving' | 'in_game' | 'synced';
 
 export interface LobbyMember extends User {
 	lobbyId: string;
-	joinedAt: number;
 	status: LobbyMemberStatus;
+	joinedAt: number;
 }

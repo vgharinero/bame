@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { GameEngine, Lobby } from '../../engine/types';
-import * as lobbyActions from '../../server/actions/lobby-actions';
+import { lobbyActions } from '../../server/actions';
 import type { LobbyRealtimeEvent } from '../../storage';
 import { useAuth, useStorage } from '../context';
 
@@ -13,7 +13,11 @@ export interface UseLobbyReturn<TConfig extends object = object> {
 	isHost: boolean;
 	isMember: boolean;
 
-	createLobby: (config: TConfig, maxPlayers: number) => Promise<Lobby<TConfig>>;
+	createLobby: (
+		config: TConfig,
+		minPlayers: number,
+		maxPlayers: number,
+	) => Promise<Lobby<TConfig>>;
 	joinLobby: (lobbyId: string) => Promise<void>;
 	leaveLobby: () => Promise<void>;
 	startGame: <
@@ -89,13 +93,18 @@ export const useLobby = <TConfig extends object = object>(
 	}, [lobbyId, realtimeStorage, fetchLobby]);
 
 	// Actions
-	const createLobby = async (config: TConfig, maxPlayers: number) => {
+	const createLobby = async (
+		config: TConfig,
+		minPlayers: number,
+		maxPlayers: number,
+	) => {
 		if (!user) throw new Error('Not authenticated');
 		const newLobby = await lobbyActions.createLobby(
 			lobbyStorage,
 			realtimeStorage,
 			user.id,
 			config,
+			minPlayers,
 			maxPlayers,
 		);
 		setLobby(newLobby);

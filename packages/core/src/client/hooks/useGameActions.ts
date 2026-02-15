@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from 'react';
 import type { Action, GameEngine, GameState } from '../../engine/types';
-import * as gameActions from '../../server/actions/game-actions';
+import { gameActions } from '../../server/actions';
 import { useAuth, useStorage } from '../context';
 
 export interface UseGameActionsReturn<

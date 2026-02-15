@@ -1,14 +1,20 @@
-import type { GameAction } from '../types/action';
-import type { Player } from '../types/player';
-import type { GameState } from '../types/state';
+import type { Action, GameState, Player } from '../types';
 
 export const isGameActive = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
 ): boolean => {
 	return state.status === 'active';
 };
@@ -16,10 +22,18 @@ export const isGameActive = <
 export const isPlayerTurn = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
 	playerId: string,
 ): boolean => {
 	return state.turn.currentPlayerId === playerId;
@@ -36,11 +50,19 @@ export const isPlayerActive = (
 export const isActionAllowed = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
-	actionType: string,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
+	actionType: TActionType,
 ): boolean => {
 	return state.turn.allowedActions.includes(actionType);
 };
@@ -56,10 +78,18 @@ export const validateRequiredPhase = (
 export const areRequiredActionsComplete = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
 ): boolean => {
 	return !state.turn.requiredActions || state.turn.requiredActions.length === 0;
 };
@@ -67,10 +97,18 @@ export const areRequiredActionsComplete = <
 export const canPlayerAct = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
 	playerId: string,
 ): boolean => {
 	return (
@@ -83,11 +121,19 @@ export const canPlayerAct = <
 export const canPerformAction = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
-	action: GameAction,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
+	action: Action,
 ): boolean => {
 	return (
 		canPlayerAct(state, action.playerId) &&
@@ -99,10 +145,18 @@ export const canPerformAction = <
 export const canAdvancePhase = <
 	TPublicState extends object,
 	TPrivateState extends object,
+	TActionType extends string,
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<object, TPublicState, TPrivateState, TPhase, TPhaseData>,
+	state: GameState<
+		object,
+		TPublicState,
+		TPrivateState,
+		TActionType,
+		TPhase,
+		TPhaseData
+	>,
 ): boolean => {
 	return isGameActive(state) && areRequiredActionsComplete(state);
 };

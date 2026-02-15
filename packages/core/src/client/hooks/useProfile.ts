@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { Profile } from '../../engine/types';
-import * as profileActions from '../../server/actions/profile-actions';
+import { profileActions } from '../../server/actions';
 import { useAuth, useStorage } from '../context';
 
 export interface UseProfileReturn {

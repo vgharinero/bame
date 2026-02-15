@@ -1,30 +1,11 @@
-import type { Action } from '../engine/types';
-import type { GameState } from '../engine/types/game-state';
+import type { Action, GameState, TurnState } from '../engine/types';
 
 export interface IGameStorage {
-	createGame<
-		TConfig extends object,
-		TPublicState extends object,
-		TPrivateState extends object,
-		TPhase extends string,
-		TPhaseData extends object,
-	>(
-		lobbyId: string,
-		initialState: GameState<
-			TConfig,
-			TPublicState,
-			TPrivateState,
-			TPhase,
-			TPhaseData
-		>,
-	): Promise<
-		GameState<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData>
-	>;
-
 	getGame<
 		TConfig extends object,
 		TPublicState extends object,
 		TPrivateState extends object,
+		TActionType extends string,
 		TPhase extends string,
 		TPhaseData extends object,
 	>(
@@ -33,6 +14,7 @@ export interface IGameStorage {
 		TConfig,
 		TPublicState,
 		TPrivateState,
+		TActionType,
 		TPhase,
 		TPhaseData
 	> | null>;
@@ -41,11 +23,19 @@ export interface IGameStorage {
 		TConfig extends object,
 		TPublicState extends object,
 		TPrivateState extends object,
+		TActionType extends string,
 		TPhase extends string,
 		TPhaseData extends object,
 	>(
 		gameId: string,
-		state: GameState<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData>,
+		state: GameState<
+			TConfig,
+			TPublicState,
+			TPrivateState,
+			TActionType,
+			TPhase,
+			TPhaseData
+		>,
 	): Promise<void>;
 
 	updateGameStatus(
@@ -58,6 +48,50 @@ export interface IGameStorage {
 		playerId: string,
 		status: 'active' | 'eliminated' | 'disconnected',
 	): Promise<void>;
+
+	// RPC for atomic action application
+	applyGameActionAtomically<
+		TConfig extends object,
+		TPublicState extends object,
+		TPrivateState extends object,
+		TActionType extends string,
+		TPhase extends string,
+		TPhaseData extends object,
+	>(
+		gameId: string,
+		newState: GameState<
+			TConfig,
+			TPublicState,
+			TPrivateState,
+			TActionType,
+			TPhase,
+			TPhaseData
+		>,
+		action: Action,
+	): Promise<void>;
+
+	// RPC for atomic transition
+	transitionLobbyToGameAtomically<
+		TConfig extends object,
+		TPublicState extends object,
+		TPrivateState extends object,
+		TActionType extends string,
+		TPhase extends string,
+		TPhaseData extends object,
+	>(
+		lobbyId: string,
+		publicState: TPublicState,
+		currentPlayerId: string,
+		currentPhase: TPhase,
+		turnData: TurnState<TActionType, TPhase, TPhaseData>,
+		playerIds: string[],
+		privateStates: TPrivateState[],
+		config: TConfig,
+		seed: string,
+	): Promise<void>;
+
+	// RPC to sync player and check if all ready
+	syncPlayerToGameAtomically(gameId: string, userId: string): Promise<void>;
 
 	// Action history (optional, for replay/anti-cheat)
 	saveAction?(gameId: string, action: Action): Promise<void>;

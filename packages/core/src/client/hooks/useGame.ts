@@ -96,6 +96,17 @@ export const useGame = <
 		fetchGame();
 	}, [fetchGame]);
 
+	useEffect(() => {
+		if (!gameId || !user || !game) return;
+
+		// Auto-sync when component mounts and game is waiting
+		if (game.status === 'waiting') {
+			gameStorage
+				.syncPlayerToGameAtomically(gameId, user.id)
+				.catch(console.error);
+		}
+	}, [gameId, user, game, gameStorage]);
+
 	// Subscribe to realtime game updates
 	useEffect(() => {
 		if (!gameId) return;

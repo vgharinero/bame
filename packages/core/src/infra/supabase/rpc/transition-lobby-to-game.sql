@@ -1,15 +1,20 @@
 CREATE OR REPLACE FUNCTION transition_lobby_to_game(
   p_lobby_id UUID,
-  p_game_id UUID,
-  p_initial_state JSONB,
+  p_public_state JSONB,
+  p_current_player_id UUID,
+  p_current_phase TEXT,
+  p_turn_data JSONB,
+  p_player_ids UUID[],
+  p_private_states JSONB[],
   p_config JSONB,
   p_seed TEXT
 ) RETURNS UUID AS $$
 DECLARE
   v_lobby_status TEXT;
   v_member_count INT;
+  v_player_index INT := 1;
 BEGIN
-  -- 1. Validate lobby exists and is in 'starting' state
+  -- 1. Validate lobby
   SELECT status INTO v_lobby_status 
   FROM lobbies 
   WHERE id = p_lobby_id;
@@ -31,37 +36,42 @@ BEGIN
     RAISE EXCEPTION 'No members in lobby';
   END IF;
 
-  -- 3. Create game (atomic)
-  INSERT INTO games (id, lobby_id, status, config, public_state, seed, created_at)
+  -- 3. Create game
+  INSERT INTO games (
+    id, 
+    config, 
+    current_player_id,
+    current_phase,
+    turn_data,
+    public_state,
+    seed
+  )
   VALUES (
-    p_game_id,
     p_lobby_id,
-    'active',
     p_config,
-    p_initial_state,
-    p_seed,
-    EXTRACT(EPOCH FROM NOW()) * 1000
+    p_current_player_id,
+    p_current_phase,
+    p_turn_data,
+    p_public_state,
+    p_seed
   );
 
-  -- 4. Create game_players from lobby_members
-  INSERT INTO game_players (game_id, user_id, status, private_state, joined_at)
+  -- 4. Create game_players with proper private states
+  INSERT INTO game_players (game_id, user_id, private_state)
   SELECT 
-    p_game_id,
-    user_id,
-    'active',
-    '{}'::JSONB,
-    EXTRACT(EPOCH FROM NOW()) * 1000
-  FROM lobby_members
-  WHERE lobby_id = p_lobby_id AND status = 'in_lobby';
+    p_lobby_id,
+    p_player_ids[idx],
+    p_private_states[idx],
+FROM generate_subscripts(p_player_ids, 1) AS idx;
 
-  -- 5. Update lobby_members status
+  -- 5. Update lobby_members
   UPDATE lobby_members
   SET status = 'in_game'
   WHERE lobby_id = p_lobby_id AND status = 'in_lobby';
 
-  -- 6. Update lobby status
+  -- 6. Update lobby
   UPDATE lobbies
-  SET status = 'started', started_at = EXTRACT(EPOCH FROM NOW()) * 1000
+  SET status = 'started', updated_at = NOW()
   WHERE id = p_lobby_id;
 
   RETURN p_game_id;

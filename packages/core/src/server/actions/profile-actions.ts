@@ -1,5 +1,3 @@
-'use server';
-
 import type { Profile } from '../../engine/types';
 import type { IProfileStorage } from '../../storage';
 

@@ -1,5 +1,3 @@
-'use server';
-
 import type { Action, GameEngine, GameState } from '../../engine/types';
 import type {
 	IGameStorage,
@@ -71,11 +69,8 @@ export const applyGameAction = async <
 		);
 	}
 
-	// Save new state
-	await gameStorage.updateGameState(gameId, result.newState);
-
-	// Save action history
-	await gameStorage.saveAction?.(gameId, action);
+	// Call RPC to atomically update state + save action
+	await gameStorage.applyGameActionAtomically(gameId, result.newState, action);
 
 	// Broadcast state update
 	await realtimeStorage.broadcastGameEvent(gameId, {
@@ -109,7 +104,7 @@ export const endGame = async (
 		.filter((p) => !winners.includes(p.id))
 		.map((p) => p.id);
 
-	await profileStorage.handleGameEnd({
+	await profileStorage.handleGameEndAtomically({
 		winners,
 		losers,
 		isDraw,
