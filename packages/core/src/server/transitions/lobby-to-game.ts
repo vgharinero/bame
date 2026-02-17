@@ -1,4 +1,4 @@
-import type { GameEngine } from '../../engine/types';
+import type { Engine } from '../../engine/types';
 import type {
 	IGameStorage,
 	ILobbyStorage,
@@ -17,7 +17,7 @@ export const transitionLobbyToGame = async <
 	lobbyStorage: ILobbyStorage,
 	gameStorage: IGameStorage,
 	realtimeStorage: IRealtimeStorage,
-	gameImplementation: GameEngine<
+	gameImplementation: Engine<
 		TConfig,
 		TPublicState,
 		TPrivateState,

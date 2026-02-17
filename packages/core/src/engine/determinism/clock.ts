@@ -4,14 +4,14 @@ export interface TurnTimerConfig {
 	autoEndTurnOnExpire?: boolean;
 }
 
-export interface TurnTimerState {
+export interface TurnTimer {
 	turnStartedAt: number;
 	pausedAt?: number;
 	accumulatedTimeMs?: number;
 }
 
 export const isTurnExpired = (
-	timerState: TurnTimerState,
+	timer: TurnTimer,
 	config: TurnTimerConfig,
 	currentTimestamp: number = Date.now(),
 ): boolean => {
@@ -19,12 +19,12 @@ export const isTurnExpired = (
 		return false;
 	}
 
-	const elapsed = getElapsedTimeMs(timerState, currentTimestamp);
+	const elapsed = getElapsedTimeMs(timer, currentTimestamp);
 	return elapsed >= config.maxTurnDurationMs;
 };
 
 export const getRemainingTimeMs = (
-	timerState: TurnTimerState,
+	timer: TurnTimer,
 	config: TurnTimerConfig,
 	currentTimestamp: number = Date.now(),
 ): number | null => {
@@ -32,29 +32,29 @@ export const getRemainingTimeMs = (
 		return null;
 	}
 
-	const elapsed = getElapsedTimeMs(timerState, currentTimestamp);
+	const elapsed = getElapsedTimeMs(timer, currentTimestamp);
 	const remaining = config.maxTurnDurationMs - elapsed;
 	return Math.max(0, remaining);
 };
 
 export const getElapsedTimeMs = (
-	timerState: TurnTimerState,
+	timer: TurnTimer,
 	currentTimestamp: number = Date.now(),
 ): number => {
-	const accumulated = timerState.accumulatedTimeMs ?? 0;
+	const accumulated = timer.accumulatedTimeMs ?? 0;
 
-	if (timerState.pausedAt !== undefined) {
+	if (timer.pausedAt !== undefined) {
 		// Turn is paused, return accumulated time only
 		return accumulated;
 	}
 
 	// Turn is active, add time since start
-	const activeDuration = currentTimestamp - timerState.turnStartedAt;
+	const activeDuration = currentTimestamp - timer.turnStartedAt;
 	return accumulated + activeDuration;
 };
 
 export const isInWarningThreshold = (
-	timerState: TurnTimerState,
+	timer: TurnTimer,
 	config: TurnTimerConfig,
 	currentTimestamp: number = Date.now(),
 ): boolean => {
@@ -62,7 +62,7 @@ export const isInWarningThreshold = (
 		return false;
 	}
 
-	const remaining = getRemainingTimeMs(timerState, config, currentTimestamp);
+	const remaining = getRemainingTimeMs(timer, config, currentTimestamp);
 	if (remaining === null) {
 		return false;
 	}
@@ -72,41 +72,41 @@ export const isInWarningThreshold = (
 
 export const startTurnTimer = (
 	currentTimestamp: number = Date.now(),
-): TurnTimerState => ({
+): TurnTimer => ({
 	turnStartedAt: currentTimestamp,
 	accumulatedTimeMs: 0,
 });
 
 export const pauseTurnTimer = (
-	timerState: TurnTimerState,
+	timer: TurnTimer,
 	currentTimestamp: number = Date.now(),
-): TurnTimerState => {
-	if (timerState.pausedAt !== undefined) {
-		return timerState; // Already paused
+): TurnTimer => {
+	if (timer.pausedAt !== undefined) {
+		return timer; // Already paused
 	}
 
 	const accumulated =
-		(timerState.accumulatedTimeMs ?? 0) +
-		(currentTimestamp - timerState.turnStartedAt);
+		(timer.accumulatedTimeMs ?? 0) +
+		(currentTimestamp - timer.turnStartedAt);
 
 	return {
-		...timerState,
+		...timer,
 		pausedAt: currentTimestamp,
 		accumulatedTimeMs: accumulated,
 	};
 };
 
 export const resumeTurnTimer = (
-	timerState: TurnTimerState,
+	timer: TurnTimer,
 	currentTimestamp: number = Date.now(),
-): TurnTimerState => {
-	if (timerState.pausedAt === undefined) {
-		return timerState; // Not paused
+): TurnTimer => {
+	if (timer.pausedAt === undefined) {
+		return timer; // Not paused
 	}
 
 	return {
 		turnStartedAt: currentTimestamp,
-		accumulatedTimeMs: timerState.accumulatedTimeMs ?? 0,
+		accumulatedTimeMs: timer.accumulatedTimeMs ?? 0,
 		pausedAt: undefined,
 	};
 };

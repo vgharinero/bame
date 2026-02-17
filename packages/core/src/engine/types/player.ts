@@ -1,9 +1,13 @@
-import type { User } from './profile';
+import type { PublicUserInfo } from './user';
+import type { VersionedEntity } from './versioned-entity';
 
 export type PlayerStatus = 'syncing' | 'active' | 'eliminated' | 'disconnected';
 
-export interface Player<TPrivateState extends object = object> extends User {
+export type PlayerId = { gameId: string; userId: string };
+
+export interface Player<TPrivateState extends object>
+	extends VersionedEntity<PlayerId>,
+		PublicUserInfo {
 	status: PlayerStatus;
 	privateState: TPrivateState;
-	joinedAt: number;
 }

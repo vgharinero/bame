@@ -17,10 +17,9 @@ export interface ILobbyStorage {
 		lobbyId: string,
 	): Promise<Lobby<TConfig> | null>;
 
-	listLobbies<TConfig extends object>(filters?: {
-		status?: 'waiting' | 'ready';
-		hasSpace?: boolean;
-	}): Promise<Lobby<TConfig>[]>;
+	listPublicAvailableLobbies<TConfig extends object>(): Promise<
+		Lobby<TConfig>[]
+	>;
 
 	updateConfig<TConfig extends object>(
 		lobbyId: string,
@@ -31,7 +30,13 @@ export interface ILobbyStorage {
 
 	deleteLobby(lobbyId: string): Promise<void>;
 
-	joinLobby(lobbyId: string, userId: string): Promise<LobbyMember>;
+	joinPublicLobby(lobbyId: string, userId: string): Promise<LobbyMember>;
+
+	joinPrivateLobby(
+		lobbyId: string,
+		code: string,
+		userId: string,
+	): Promise<LobbyMember>;
 
 	leaveLobby(lobbyId: string, userId: string): Promise<void>;
 

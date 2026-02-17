@@ -1,4 +1,4 @@
-import type { Action, GameState, Player } from '../types';
+import type { Action, Game, Player } from '../types';
 
 export const isGameActive = <
 	TPublicState extends object,
@@ -7,7 +7,7 @@ export const isGameActive = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,
@@ -26,7 +26,7 @@ export const isPlayerTurn = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,
@@ -54,7 +54,7 @@ export const isActionAllowed = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,
@@ -82,7 +82,7 @@ export const areRequiredActionsComplete = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,
@@ -101,7 +101,7 @@ export const canPlayerAct = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,
@@ -125,7 +125,7 @@ export const canPerformAction = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,
@@ -149,7 +149,7 @@ export const canAdvancePhase = <
 	TPhase extends string,
 	TPhaseData extends object,
 >(
-	state: GameState<
+	state: Game<
 		object,
 		TPublicState,
 		TPrivateState,

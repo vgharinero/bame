@@ -1,4 +1,4 @@
-import type { Action, GameEngine, GameState } from '../../engine/types';
+import type { Action, Engine, Game } from '../../engine/types';
 import type {
 	IGameStorage,
 	IProfileStorage,
@@ -17,7 +17,7 @@ export const applyGameAction = async <
 	gameStorage: IGameStorage,
 	profileStorage: IProfileStorage,
 	realtimeStorage: IRealtimeStorage,
-	gameImplementation: GameEngine<
+	gameImplementation: Engine<
 		TConfig,
 		TPublicState,
 		TPrivateState,
@@ -29,13 +29,14 @@ export const applyGameAction = async <
 	gameId: string,
 	action: Action<TActionType, TActionPayload>,
 ): Promise<
-	GameState<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData>
+	Game<TConfig, TPublicState, TPrivateState, TActionType, TPhase, TPhaseData>
 > => {
 	// Get current state
 	const currentState = await gameStorage.getGame<
 		TConfig,
 		TPublicState,
 		TPrivateState,
+		TActionType,
 		TPhase,
 		TPhaseData
 	>(gameId);

@@ -1,6 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Profile } from '../../../engine/types';
-import type { IProfileStorage } from '../../../storage/profile-storage';
+import type { IProfileStorage } from '../../../storage/profile';
 
 export class SupabaseProfileStorage implements IProfileStorage {
 	constructor(private client: SupabaseClient) {}

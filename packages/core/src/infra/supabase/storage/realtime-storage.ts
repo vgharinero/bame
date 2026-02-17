@@ -1,10 +1,5 @@
 import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
-import type {
-	Action,
-	GameState,
-	Lobby,
-	LobbyMember,
-} from '../../../engine/types';
+import type { Action, Game, Lobby, LobbyMember } from '../../../engine/types';
 import type {
 	GameRealtimeEvent,
 	IRealtimeStorage,
@@ -85,7 +80,9 @@ export class SupabaseRealtimeStorage implements IRealtimeStorage {
 
 		return {
 			unsubscribe: () => {
-				this.client.removeChannel(channel);
+				if (channel.state !== 'closed') {
+					return this.client.removeChannel(channel);
+				}
 			},
 		};
 	}
@@ -107,7 +104,7 @@ export class SupabaseRealtimeStorage implements IRealtimeStorage {
 				(payload) => {
 					callback({
 						type: 'game:state_updated',
-						state: payload.new as GameState,
+						state: payload.new as Game,
 					});
 				},
 			)
@@ -171,7 +168,43 @@ export class SupabaseRealtimeStorage implements IRealtimeStorage {
 
 		return {
 			unsubscribe: () => {
-				this.client.removeChannel(channel);
+				if (channel.state !== 'closed') {
+					this.client.removeChannel(channel);
+				}
+			},
+		};
+	}
+
+	subscribeLobbies(
+		callback: (event: { type: 'lobby_list:updated' }) => void,
+	): RealtimeSubscription {
+		const channel: RealtimeChannel = this.client
+			.channel('lobbies:all')
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'lobbies',
+				},
+				() => callback({ type: 'lobby_list:updated' }),
+			)
+			.on(
+				'postgres_changes',
+				{
+					event: '*',
+					schema: 'public',
+					table: 'lobby_members',
+				},
+				() => callback({ type: 'lobby_list:updated' }),
+			)
+			.subscribe();
+
+		return {
+			unsubscribe: () => {
+				if (channel.state !== 'closed') {
+					this.client.removeChannel(channel);
+				}
 			},
 		};
 	}

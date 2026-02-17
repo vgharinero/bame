@@ -1,9 +1,10 @@
-import type { User } from './profile';
+import type { PublicUserInfo } from './user';
+import type { VersionedEntity } from './versioned-entity';
 
-export type LobbyMemberStatus = 'in_lobby' | 'leaving' | 'in_game' | 'synced';
+export type LobbyMemberStatus = 'in_lobby' | 'ready' | 'synced';
 
-export interface LobbyMember extends User {
-	lobbyId: string;
+export type MemberId = { lobbyId: string; userId: string };
+
+export interface LobbyMember extends VersionedEntity<MemberId>, PublicUserInfo {
 	status: LobbyMemberStatus;
-	joinedAt: number;
 }

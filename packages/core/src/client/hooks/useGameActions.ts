@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import type { Action, GameEngine, GameState } from '../../engine/types';
+import type { Action, Engine, Game } from '../../engine/types';
 import { gameActions } from '../../server/actions';
 import { useAuth, useStorage } from '../context';
 
@@ -26,7 +26,7 @@ export const useGameActions = <
 	TPhaseData extends object = object,
 >(
 	gameId: string,
-	gameImplementation: GameEngine<
+	gameImplementation: Engine<
 		TConfig,
 		TPublicState,
 		TPrivateState,
@@ -35,15 +35,23 @@ export const useGameActions = <
 		TPhase,
 		TPhaseData
 	>,
-	currentState: GameState<
+	currentState: Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,
+		TActionType,
 		TPhase,
 		TPhaseData
 	> | null,
 	onOptimisticUpdate: (
-		state: GameState<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData>,
+		state: Game<
+			TConfig,
+			TPublicState,
+			TPrivateState,
+			TActionType,
+			TPhase,
+			TPhaseData
+		>,
 	) => void,
 ): UseGameActionsReturn<TActionType, TActionPayload> => {
 	const { user } = useAuth();

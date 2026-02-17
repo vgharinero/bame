@@ -1,15 +1,15 @@
 import type { Action, ActionResult } from './action';
-import type { GameState } from './game-state';
-import type { TurnState } from './turn';
+import type { Game } from './game';
+import type { Turn } from './turn';
 
-export interface GameEngine<
-	TConfig extends object = object,
-	TPublicState extends object = object,
-	TPrivateState extends object = object,
-	TActionType extends string = string,
-	TActionPayload extends object = object,
-	TPhase extends string = string,
-	TPhaseData extends object = object,
+export interface Engine<
+	TConfig extends object,
+	TPublicState extends object,
+	TPrivateState extends object,
+	TActionType extends string,
+	TActionPayload extends object,
+	TPhase extends string,
+	TPhaseData extends object,
 > {
 	name: string;
 	minPlayers: number;
@@ -28,7 +28,7 @@ export interface GameEngine<
 	>;
 
 	validateAction(
-		state: GameState<
+		state: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -40,7 +40,7 @@ export interface GameEngine<
 	): boolean;
 
 	applyAction(
-		state: GameState<
+		state: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -50,18 +50,11 @@ export interface GameEngine<
 		>,
 		action: Action<TActionType, TActionPayload>,
 	): ActionResult<
-		GameState<
-			TConfig,
-			TPublicState,
-			TPrivateState,
-			TActionType,
-			TPhase,
-			TPhaseData
-		>
+		Game<TConfig, TPublicState, TPrivateState, TActionType, TPhase, TPhaseData>
 	>;
 
 	checkGameEnd(
-		state: GameState<
+		state: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -77,13 +70,13 @@ export interface GameEngine<
 }
 
 export type GameInitializationResult<
-	TPublicState extends object = object,
-	TPrivateState extends object = object,
-	TActionType extends string = string,
-	TPhase extends string = string,
-	TPhaseData extends object = object,
+	TPublicState extends object,
+	TPrivateState extends object,
+	TActionType extends string,
+	TPhase extends string,
+	TPhaseData extends object,
 > = {
 	publicState: TPublicState;
 	initialPrivateStates: TPrivateState[]; // One per player, in order
-	initialTurn: TurnState<TActionType, TPhase, TPhaseData>;
+	initialTurn: Turn<TActionType, TPhase, TPhaseData>;
 };

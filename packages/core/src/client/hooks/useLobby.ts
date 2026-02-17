@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { GameEngine, Lobby } from '../../engine/types';
+import type { Engine, Lobby } from '../../engine/types';
 import { lobbyActions } from '../../server/actions';
 import type { LobbyRealtimeEvent } from '../../storage';
 import { useAuth, useStorage } from '../context';
@@ -28,7 +28,7 @@ export interface UseLobbyReturn<TConfig extends object = object> {
 		TPhase extends string,
 		TPhaseData extends object,
 	>(
-		gameImplementation: GameEngine<
+		gameImplementation: Engine<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -136,7 +136,7 @@ export const useLobby = <TConfig extends object = object>(
 		TPhase extends string,
 		TPhaseData extends object,
 	>(
-		gameImplementation: GameEngine<
+		gameImplementation: Engine<
 			TConfig,
 			TPublicState,
 			TPrivateState,

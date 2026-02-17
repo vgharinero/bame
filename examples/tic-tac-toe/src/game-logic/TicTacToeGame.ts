@@ -92,6 +92,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
+			TicTacToeActionType,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,
@@ -127,6 +128,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
+			TicTacToeActionType,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,
@@ -144,8 +146,9 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
+			TicTacToeActionType,
 			TicTacToePhase,
-			{}
+			TicTacToePhaseData
 		> = {
 			...state,
 			publicState: {
@@ -171,6 +174,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
+			TicTacToeActionType,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,
@@ -242,6 +246,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
+			TicTacToeActionType,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,

@@ -1,9 +1,9 @@
-import type { TurnTimerState } from '../determinism';
+import type { TurnTimer } from '../determinism';
 
-export interface TurnState<
-	TActionType extends string = string,
-	TPhase extends string = string,
-	TPhaseData extends object = object,
+export interface Turn<
+	TActionType extends string,
+	TPhase extends string,
+	TPhaseData extends object,
 > {
 	currentPlayerId: string;
 	phase: TPhase;
@@ -12,5 +12,5 @@ export interface TurnState<
 	requiredActions?: TActionType[];
 	number: number;
 	startedAt?: number;
-	timer?: TurnTimerState;
+	timer?: TurnTimer;
 }

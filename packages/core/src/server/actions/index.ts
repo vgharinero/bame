@@ -1,3 +1,3 @@
-export * as gameActions from './game-actions';
-export * as lobbyActions from './lobby-actions';
-export * as profileActions from './profile-actions';
+export * as gameActions from './game';
+export * as lobbyActions from './lobby';
+export * as profileActions from './profile';

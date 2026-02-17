@@ -1,4 +1,10 @@
-import type { Action, GameState, TurnState } from '../engine/types';
+import type {
+	Action,
+	Game,
+	GameStatus,
+	PlayerStatus,
+	Turn,
+} from '../engine/types';
 
 export interface IGameStorage {
 	getGame<
@@ -10,7 +16,7 @@ export interface IGameStorage {
 		TPhaseData extends object,
 	>(
 		gameId: string,
-	): Promise<GameState<
+	): Promise<Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,
@@ -28,7 +34,7 @@ export interface IGameStorage {
 		TPhaseData extends object,
 	>(
 		gameId: string,
-		state: GameState<
+		state: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -38,15 +44,12 @@ export interface IGameStorage {
 		>,
 	): Promise<void>;
 
-	updateGameStatus(
-		gameId: string,
-		status: 'waiting' | 'starting' | 'active' | 'finished' | 'aborted',
-	): Promise<void>;
+	updateGameStatus(gameId: string, status: GameStatus): Promise<void>;
 
 	updatePlayerStatus(
 		gameId: string,
 		playerId: string,
-		status: 'active' | 'eliminated' | 'disconnected',
+		status: PlayerStatus,
 	): Promise<void>;
 
 	// RPC for atomic action application
@@ -55,11 +58,12 @@ export interface IGameStorage {
 		TPublicState extends object,
 		TPrivateState extends object,
 		TActionType extends string,
+		TActionPayload extends object,
 		TPhase extends string,
 		TPhaseData extends object,
 	>(
 		gameId: string,
-		newState: GameState<
+		newState: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -67,7 +71,7 @@ export interface IGameStorage {
 			TPhase,
 			TPhaseData
 		>,
-		action: Action,
+		action: Action<TActionType, TActionPayload>,
 	): Promise<void>;
 
 	// RPC for atomic transition
@@ -83,7 +87,7 @@ export interface IGameStorage {
 		publicState: TPublicState,
 		currentPlayerId: string,
 		currentPhase: TPhase,
-		turnData: TurnState<TActionType, TPhase, TPhaseData>,
+		turnData: Turn<TActionType, TPhase, TPhaseData>,
 		playerIds: string[],
 		privateStates: TPrivateState[],
 		config: TConfig,
@@ -94,7 +98,12 @@ export interface IGameStorage {
 	syncPlayerToGameAtomically(gameId: string, userId: string): Promise<void>;
 
 	// Action history (optional, for replay/anti-cheat)
-	saveAction?(gameId: string, action: Action): Promise<void>;
+	saveAction?<TActionType extends string, TActionPayload extends object>(
+		gameId: string,
+		action: Action<TActionType, TActionPayload>,
+	): Promise<void>;
 
-	getActionHistory?(gameId: string): Promise<Action[]>;
+	getActionHistory?<TActionType extends string, TActionPayload extends object>(
+		gameId: string,
+	): Promise<Action<TActionType, TActionPayload>[]>;
 }

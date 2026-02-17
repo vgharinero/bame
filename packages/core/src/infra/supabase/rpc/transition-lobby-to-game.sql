@@ -58,11 +58,11 @@ BEGIN
 
   -- 4. Create game_players with proper private states
   INSERT INTO game_players (game_id, user_id, private_state)
-  SELECT 
+  SELECT
     p_lobby_id,
     p_player_ids[idx],
-    p_private_states[idx],
-FROM generate_subscripts(p_player_ids, 1) AS idx;
+    p_private_states[idx]
+  FROM generate_subscripts(p_player_ids, 1) AS idx;
 
   -- 5. Update lobby_members
   UPDATE lobby_members
@@ -71,9 +71,9 @@ FROM generate_subscripts(p_player_ids, 1) AS idx;
 
   -- 6. Update lobby
   UPDATE lobbies
-  SET status = 'started', updated_at = NOW()
+  SET status = 'transitioned', updated_at = NOW()
   WHERE id = p_lobby_id;
 
-  RETURN p_game_id;
+  RETURN p_lobby_id;
 END;
 $$ LANGUAGE plpgsql;

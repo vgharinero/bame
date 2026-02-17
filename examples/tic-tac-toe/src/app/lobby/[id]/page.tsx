@@ -1,9 +1,13 @@
 'use client';
 
-import { LoadingOverlay, useLobby } from '@bame/core/client';
+import {
+	LoadingOverlay,
+	useActiveRedirect,
+	useLobby,
+} from '@bame/core/client';
 import { useAuth } from '@bame/core/infra/nextjs/providers';
 import { useParams, useRouter } from 'next/navigation';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import {
 	type TicTacToeConfig,
 	ticTacToeGame,
@@ -26,29 +30,38 @@ export default function LobbyPage() {
 		startGame,
 	} = useLobby<TicTacToeConfig>(lobbyId);
 
+	const { skipRedirect } = useActiveRedirect();
+	const [isJoining, setIsJoining] = useState(false);
+
+	// Redirect if not authenticated
 	useEffect(() => {
 		if (!user) {
 			router.push('/');
 			return;
 		}
+	}, [user, router]);
 
-		// Auto-join if not a member
-		if (lobby && !isMember && lobby.members.length < lobby.maxPlayers) {
-			joinLobby(lobbyId).catch(console.error);
-		}
-	}, [user, lobby, router, isMember, lobbyId, joinLobby]);
-
-	// Redirect to game when lobby starts
+	// Redirect to game when lobby transitions
 	useEffect(() => {
 		if (lobby?.status === 'transitioned') {
-			router.push(`/game/${lobbyId}`); // gameId = lobbyId
+			router.push(`/game/${lobbyId}`);
 		}
 	}, [lobby, lobbyId, router]);
+
+	const handleJoin = async () => {
+		try {
+			setIsJoining(true);
+			await joinLobby(lobbyId);
+		} catch (err) {
+			console.error('Failed to join lobby:', err);
+		} finally {
+			setIsJoining(false);
+		}
+	};
 
 	const handleStart = async () => {
 		try {
 			await startGame(ticTacToeGame);
-			// Will redirect via useEffect above
 		} catch (err) {
 			console.error('Failed to start game:', err);
 		}
@@ -56,10 +69,13 @@ export default function LobbyPage() {
 
 	const handleLeave = async () => {
 		try {
+			skipRedirect();
 			await leaveLobby();
 			router.push('/lobbies');
 		} catch (err) {
 			console.error('Failed to leave lobby:', err);
+			console.error('Error details:', JSON.stringify(err, null, 2));
+			alert(`Failed to leave lobby: ${err instanceof Error ? err.message : 'Unknown error'}`);
 		}
 	};
 
@@ -83,6 +99,9 @@ export default function LobbyPage() {
 	}
 
 	const canStart = isHost && lobby?.status === 'ready';
+	const canJoin =
+		!isMember && lobby && lobby.members.length < lobby.maxPlayers;
+	const lobbyFull = !!(lobby && lobby.members.length >= lobby.maxPlayers);
 
 	return (
 		<>
@@ -98,13 +117,24 @@ export default function LobbyPage() {
 					<div className="mb-6 rounded-lg bg-white p-6 shadow">
 						<div className="mb-4 flex items-center justify-between">
 							<h1 className="text-2xl font-bold">Lobby</h1>
-							<button
-								type="button"
-								onClick={handleLeave}
-								className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
-							>
-								Leave
-							</button>
+							{isMember && (
+								<button
+									type="button"
+									onClick={handleLeave}
+									className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+								>
+									Leave
+								</button>
+							)}
+							{!isMember && (
+								<button
+									type="button"
+									onClick={() => router.push('/lobbies')}
+									className="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
+								>
+									Back
+								</button>
+							)}
 						</div>
 
 						<div className="mb-4">
@@ -146,7 +176,24 @@ export default function LobbyPage() {
 						</div>
 					</div>
 
-					{isHost && (
+					{/* Join Button - shown when not a member and space available */}
+					{canJoin && (
+						<button
+							type="button"
+							onClick={handleJoin}
+							disabled={isJoining || lobbyFull}
+							className={`w-full rounded py-3 font-medium text-white mb-4 ${
+								isJoining || lobbyFull
+									? 'bg-gray-400 cursor-not-allowed'
+									: 'bg-green-600 hover:bg-green-700'
+							}`}
+						>
+							{isJoining ? 'Joining...' : lobbyFull ? 'Lobby Full' : 'Join Game'}
+						</button>
+					)}
+
+					{/* Start Button - shown when host and ready */}
+					{isHost && isMember && (
 						<button
 							type="button"
 							onClick={handleStart}
@@ -161,7 +208,8 @@ export default function LobbyPage() {
 						</button>
 					)}
 
-					{!isHost && (
+					{/* Waiting message - shown when member but not host */}
+					{!isHost && isMember && (
 						<div className="text-center text-gray-600">
 							Waiting for host to start the game...
 						</div>

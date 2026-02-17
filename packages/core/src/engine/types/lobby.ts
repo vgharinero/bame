@@ -1,11 +1,6 @@
 import type { LobbyMember } from './lobby-member';
 
-export type LobbyStatus =
-	| 'waiting'
-	| 'ready'
-	| 'starting'
-	| 'transitioned'
-	| 'closed';
+export type LobbyStatus = 'waiting' | 'ready' | 'starting' | 'transitioned';
 
 export interface Lobby<TConfig extends object = object> {
 	id: string;

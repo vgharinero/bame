@@ -1,10 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type {
-	Action,
-	GameState,
-	Player,
-	TurnState,
-} from '../../../engine/types';
+import type { Action, Game, Player, Turn } from '../../../engine/types';
 import type { IGameStorage } from '../../../storage';
 
 export class SupabaseGameStorage implements IGameStorage {
@@ -19,7 +14,7 @@ export class SupabaseGameStorage implements IGameStorage {
 		TPhaseData extends object,
 	>(
 		gameId: string,
-	): Promise<GameState<
+	): Promise<Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,
@@ -70,7 +65,7 @@ export class SupabaseGameStorage implements IGameStorage {
 		TPhaseData extends object,
 	>(
 		gameId: string,
-		state: GameState<
+		state: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -153,7 +148,7 @@ export class SupabaseGameStorage implements IGameStorage {
 		publicState: TPublicState,
 		currentPlayerId: string,
 		currentPhase: TPhase,
-		turnData: TurnState<TActionType, TPhase, TPhaseData>,
+		turnData: Turn<TActionType, TPhase, TPhaseData>,
 		playerIds: string[],
 		privateStates: TPrivateState[],
 		config: TConfig,
@@ -183,7 +178,7 @@ export class SupabaseGameStorage implements IGameStorage {
 		TPhaseData extends object,
 	>(
 		gameId: string,
-		newState: GameState<
+		newState: Game<
 			TConfig,
 			TPublicState,
 			TPrivateState,
@@ -223,7 +218,7 @@ export class SupabaseGameStorage implements IGameStorage {
 		TPhaseData extends object,
 	>(
 		data: any,
-	): GameState<
+	): Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,

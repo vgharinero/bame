@@ -8,7 +8,6 @@ BEGIN
   UPDATE games
   SET 
     public_state = p_new_state,
-    updated_at = EXTRACT(EPOCH FROM NOW()) * 1000
   WHERE id = p_game_id AND status = 'active';
   
   IF NOT FOUND THEN
@@ -16,11 +15,10 @@ BEGIN
   END IF;
 
   -- 2. Insert action into history (optional)
-  INSERT INTO game_actions (game_id, action_data, created_at)
+  INSERT INTO game_actions (game_id, action_data)
   VALUES (
     p_game_id,
-    p_action,
-    EXTRACT(EPOCH FROM NOW()) * 1000
+    p_action
   );
 END;
 $$ LANGUAGE plpgsql;

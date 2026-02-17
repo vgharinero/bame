@@ -115,6 +115,62 @@ export class SupabaseLobbyStorage implements ILobbyStorage {
 		return lobbies;
 	}
 
+	async getUserLobbies<TConfig extends object>(
+		userId: string,
+		filters?: {
+			status?: LobbyStatus[];
+		},
+	): Promise<Lobby<TConfig>[]> {
+		// First, get lobby IDs where user is a member
+		const memberQuery = this.client
+			.from('lobby_members')
+			.select('lobby_id')
+			.eq('user_id', userId);
+
+		const { data: memberData, error: memberError } = await memberQuery;
+		if (memberError) throw memberError;
+
+		const lobbyIds = memberData.map((m) => m.lobby_id);
+		if (lobbyIds.length === 0) return [];
+
+		// Then fetch full lobby data with ALL members
+		let query = this.client
+			.from('lobbies')
+			.select(`
+            *,
+            lobby_members (
+				user_id,
+				status,
+				joined_at,
+				profiles (
+					id,
+					display_name,
+                    avatar_url
+                )
+            )
+        `)
+			.in('id', lobbyIds);
+
+		if (filters?.status) {
+			query = query.in('status', filters.status);
+		} else {
+			query = query.in('status', [
+				'waiting',
+				'ready',
+				'starting',
+				'transitioned',
+			]);
+		}
+
+		const { data, error } = await query.order('created_at', {
+			ascending: false,
+		});
+
+		if (error) throw error;
+
+		return data.map((d) => this.mapToLobby<TConfig>(d));
+	}
+
 	async updateConfig<TConfig extends object>(
 		lobbyId: string,
 		config: TConfig,
@@ -150,7 +206,7 @@ export class SupabaseLobbyStorage implements ILobbyStorage {
 		if (error) throw error;
 	}
 
-	async joinLobby(lobbyId: string, userId: string): Promise<LobbyMember> {
+	async joinPublicLobby(lobbyId: string, userId: string): Promise<LobbyMember> {
 		const { data, error } = await this.client
 			.from('lobby_members')
 			.insert({

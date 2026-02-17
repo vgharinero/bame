@@ -1,47 +1,34 @@
 'use client';
 
-import { useLobby } from '@bame/core/client';
-import type { Lobby } from '@bame/core/engine';
-import { useAuth, useStorage } from '@bame/core/infra/nextjs/providers';
+import { useActiveRedirect, useLobbies, useLobby } from '@bame/core/client';
+import { useAuth } from '@bame/core/infra/nextjs/providers';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import type { TicTacToeConfig } from '../../game-logic/TicTacToeGame';
 
 export default function LobbiesPage() {
 	const { user, signOut } = useAuth();
-	const { lobbyStorage } = useStorage();
 	const { createLobby } = useLobby<TicTacToeConfig>();
+	const { myLobbies, availableLobbies, isLoading } =
+		useLobbies<TicTacToeConfig>();
+	const { activeSession, isChecking } = useActiveRedirect();
 	const router = useRouter();
 
-	const [lobbies, setLobbies] = useState<Lobby<TicTacToeConfig>[]>([]);
-	const [isLoading, setIsLoading] = useState(true);
-
-	const fetchLobbies = useCallback(async () => {
-		try {
-			const data = await lobbyStorage.listLobbies<TicTacToeConfig>({
-				status: 'waiting',
-				hasSpace: true,
-			});
-			setLobbies(data);
-		} catch (err) {
-			console.error('Failed to fetch lobbies:', err);
-		} finally {
-			setIsLoading(false);
+	useEffect(() => {
+		if (!isChecking && activeSession) {
+			if (activeSession.type === 'game') {
+				router.push(`/game/${activeSession.id}`);
+			} else {
+				router.push(`/lobby/${activeSession.id}`);
+			}
 		}
-	}, [lobbyStorage]);
+	}, [isChecking, activeSession, router]);
 
 	useEffect(() => {
 		if (!user) {
 			router.push('/');
-			return;
 		}
-
-		fetchLobbies();
-
-		// Poll for lobby updates (or use realtime subscription)
-		const interval = setInterval(fetchLobbies, 3000);
-		return () => clearInterval(interval);
-	}, [user, router, fetchLobbies]);
+	}, [user, router]);
 
 	const handleCreateLobby = async () => {
 		try {
@@ -60,20 +47,20 @@ export default function LobbiesPage() {
 		router.push(`/lobby/${lobbyId}`);
 	};
 
-	if (!user) return null;
+	if (!user || isChecking) return null;
 
 	return (
-		<div className="min-h-screen bg-gray-100 p-8">
+		<div className="bg-gray-100 p-8 min-h-screen">
 			<div className="mx-auto max-w-4xl">
-				<div className="mb-8 flex items-center justify-between">
+				<div className="flex justify-between items-center mb-8">
 					<div>
-						<h1 className="text-3xl font-bold">Tic-Tac-Toe Lobbies</h1>
+						<h1 className="font-bold text-3xl">Tic-Tac-Toe Lobbies</h1>
 						<p className="text-gray-600">Welcome, {user.displayName}!</p>
 					</div>
 					<button
 						type="button"
 						onClick={() => signOut()}
-						className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700"
+						className="bg-red-600 hover:bg-red-700 px-4 py-2 rounded text-white"
 					>
 						Sign Out
 					</button>
@@ -82,23 +69,18 @@ export default function LobbiesPage() {
 				<button
 					type="button"
 					onClick={handleCreateLobby}
-					className="mb-6 w-full rounded bg-blue-600 py-3 font-medium text-white hover:bg-blue-700"
+					className="bg-blue-600 hover:bg-blue-700 mb-6 py-3 rounded w-full font-medium text-white"
 				>
 					Create New Game
 				</button>
 
-				<div className="space-y-4">
-					<h2 className="text-xl font-semibold">Available Games</h2>
-
-					{isLoading ? (
-						<p>Loading lobbies...</p>
-					) : lobbies.length === 0 ? (
-						<p className="text-gray-500">No games available. Create one!</p>
-					) : (
-						lobbies.map((lobby) => (
+				{myLobbies.length > 0 && (
+					<div className="space-y-4 mb-8">
+						<h2 className="font-semibold text-xl">My Active Games</h2>
+						{myLobbies.map((lobby) => (
 							<div
 								key={lobby.id}
-								className="flex items-center justify-between rounded-lg bg-white p-4 shadow"
+								className="flex justify-between items-center bg-blue-50 shadow p-4 border-2 border-blue-200 rounded-lg"
 							>
 								<div>
 									<p className="font-medium">
@@ -108,15 +90,56 @@ export default function LobbiesPage() {
 												?.displayName
 										}
 									</p>
-									<p className="text-sm text-gray-600">
+									<p className="text-gray-600 text-sm">
 										Players: {lobby.members.length} / {lobby.maxPlayers}
 									</p>
-									<p className="text-xs text-gray-500">Code: {lobby.code}</p>
+									<p className="text-gray-500 text-xs">Code: {lobby.code}</p>
+									<p className="font-semibold text-blue-600 text-xs capitalize">
+										Status: {lobby.status}
+									</p>
 								</div>
 								<button
 									type="button"
 									onClick={() => handleJoinLobby(lobby.id)}
-									className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+									className="bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded text-white"
+								>
+									{lobby.status === 'waiting' ? 'Rejoin' : 'Continue'}
+								</button>
+							</div>
+						))}
+					</div>
+				)}
+
+				<div className="space-y-4">
+					<h2 className="font-semibold text-xl">Available Games</h2>
+
+					{isLoading ? (
+						<p>Loading lobbies...</p>
+					) : availableLobbies.length === 0 ? (
+						<p className="text-gray-500">No games available. Create one!</p>
+					) : (
+						availableLobbies.map((lobby) => (
+							<div
+								key={lobby.id}
+								className="flex justify-between items-center bg-white shadow p-4 rounded-lg"
+							>
+								<div>
+									<p className="font-medium">
+										Host:{' '}
+										{
+											lobby.members.find((m) => m.id === lobby.hostId)
+												?.displayName
+										}
+									</p>
+									<p className="text-gray-600 text-sm">
+										Players: {lobby.members.length} / {lobby.maxPlayers}
+									</p>
+									<p className="text-gray-500 text-xs">Code: {lobby.code}</p>
+								</div>
+								<button
+									type="button"
+									onClick={() => handleJoinLobby(lobby.id)}
+									className="bg-green-600 hover:bg-green-700 px-4 py-2 rounded text-white"
 								>
 									Join
 								</button>

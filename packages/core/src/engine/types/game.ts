@@ -1,5 +1,6 @@
 import type { Player } from './player';
-import type { TurnState } from './turn';
+import type { Turn } from './turn';
+import type { VersionedEntity } from './versioned-entity';
 
 export type GameStatus =
 	| 'waiting'
@@ -8,15 +9,14 @@ export type GameStatus =
 	| 'finished'
 	| 'aborted';
 
-export interface GameState<
+export interface Game<
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
 	TActionType extends string = string,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
-> {
-	id: string;
+> extends VersionedEntity<string> {
 	status: GameStatus;
 
 	config: TConfig;
@@ -25,12 +25,10 @@ export interface GameState<
 	publicState: TPublicState;
 	players: Player<TPrivateState>[];
 
-	turn: TurnState<TActionType, TPhase, TPhaseData>;
+	turn: Turn<TActionType, TPhase, TPhaseData>;
 
 	winner?: string;
 
-	createdAt: number;
-	updatedAt: number;
 	startedAt?: number;
 	finishedAt?: number;
 }

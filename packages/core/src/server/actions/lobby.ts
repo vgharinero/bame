@@ -1,4 +1,4 @@
-import type { GameEngine, Lobby, LobbyMember } from '../../engine/types';
+import type { Engine, Lobby, LobbyMember } from '../../engine/types';
 import type {
 	IGameStorage,
 	ILobbyStorage,
@@ -25,7 +25,7 @@ export const createLobby = async <TConfig extends object>(
 	// Broadcast lobby created (for lobby lists)
 	await realtime.broadcastLobbyEvent(lobby.id, {
 		type: 'lobby:updated',
-		lobby,
+		payload: { lobby },
 	});
 
 	return lobby;
@@ -46,7 +46,7 @@ export const joinLobby = async (
 		throw new Error('Lobby is full');
 
 	// Join lobby
-	const member = await storage.joinLobby(lobbyId, userId);
+	const member = await storage.joinPublicLobby(lobbyId, userId);
 
 	// Update lobby status if ready
 	const updatedLobby = await storage.getLobby(lobbyId);
@@ -69,34 +69,30 @@ export const leaveLobby = async (
 	lobbyId: string,
 	userId: string,
 ): Promise<void> => {
-	const lobby = await storage.getLobby(lobbyId);
-	if (!lobby) throw new Error('Lobby not found');
+	try {
+		const lobby = await storage.getLobby(lobbyId);
+		if (!lobby) throw new Error('Lobby not found');
 
-	// If host leaves, close lobby
-	if (lobby.hostId === userId) {
-		await storage.updateLobbyStatus(lobbyId, 'closed');
-		await storage.deleteLobby(lobbyId);
-		return;
+		// If host leaves, delete lobby (cascade will remove all members)
+		if (lobby.hostId === userId) {
+			await storage.deleteLobby(lobbyId);
+			return;
+		}
+
+		// Remove member
+		await storage.leaveLobby(lobbyId, userId);
+
+		// Broadcast member left
+		await realtime.broadcastLobbyEvent(lobbyId, {
+			type: 'lobby:member_left',
+			userId,
+		});
+	} catch (error) {
+		console.error('Error in leaveLobby action:', error);
+		throw new Error(
+			`Failed to leave lobby: ${error instanceof Error ? error.message : 'Unknown error'}`,
+		);
 	}
-
-	// Remove member
-	await storage.leaveLobby(lobbyId, userId);
-
-	// Update status back to waiting if no longer full
-	const updatedLobby = await storage.getLobby(lobbyId);
-	if (
-		updatedLobby &&
-		updatedLobby.status === 'ready' &&
-		updatedLobby.members.length < updatedLobby.maxPlayers
-	) {
-		await storage.updateLobbyStatus(lobbyId, 'waiting');
-	}
-
-	// Broadcast member left
-	await realtime.broadcastLobbyEvent(lobbyId, {
-		type: 'lobby:member_left',
-		userId,
-	});
 };
 
 export const startGame = async <
@@ -111,7 +107,7 @@ export const startGame = async <
 	lobbyStorage: ILobbyStorage,
 	gameStorage: IGameStorage,
 	realtimeStorage: IRealtimeStorage,
-	gameImplementation: GameEngine<
+	gameImplementation: Engine<
 		TConfig,
 		TPublicState,
 		TPrivateState,

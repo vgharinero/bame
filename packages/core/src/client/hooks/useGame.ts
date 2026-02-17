@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { GameState } from '../../engine/types/game-state';
+import type { Game } from '../../engine/types/game';
 import type { Player } from '../../engine/types/player';
 import type { GameRealtimeEvent } from '../../storage';
 import { useAuth } from '../context/AuthProvider';
@@ -11,13 +11,15 @@ export interface UseGameReturn<
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
+	TActionType extends string = string,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
 > {
-	game: GameState<
+	game: Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,
+		TActionType,
 		TPhase,
 		TPhaseData
 	> | null;
@@ -28,7 +30,14 @@ export interface UseGameReturn<
 
 	// For optimistic updates
 	setOptimisticState: (
-		state: GameState<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData>,
+		state: Game<
+			TConfig,
+			TPublicState,
+			TPrivateState,
+			TActionType,
+			TPhase,
+			TPhaseData
+		>,
 	) => void;
 
 	refetch: () => Promise<void>;
@@ -38,28 +47,38 @@ export const useGame = <
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
+	TActionType extends string = string,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
 >(
 	gameId?: string,
-): UseGameReturn<TConfig, TPublicState, TPrivateState, TPhase, TPhaseData> => {
+): UseGameReturn<
+	TConfig,
+	TPublicState,
+	TPrivateState,
+	TActionType,
+	TPhase,
+	TPhaseData
+> => {
 	const { user } = useAuth();
 	const { gameStorage, realtimeStorage } = useStorage();
 
 	// Canonical state from server
-	const [canonicalGame, setCanonicalGame] = useState<GameState<
+	const [canonicalGame, setCanonicalGame] = useState<Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,
+		TActionType,
 		TPhase,
 		TPhaseData
 	> | null>(null);
 
 	// Optimistic state (overrides canonical while pending)
-	const [optimisticGame, setOptimisticGame] = useState<GameState<
+	const [optimisticGame, setOptimisticGame] = useState<Game<
 		TConfig,
 		TPublicState,
 		TPrivateState,
+		TActionType,
 		TPhase,
 		TPhaseData
 	> | null>(null);
@@ -79,6 +98,7 @@ export const useGame = <
 				TConfig,
 				TPublicState,
 				TPrivateState,
+				TActionType,
 				TPhase,
 				TPhaseData
 			>(gameId);
@@ -117,10 +137,11 @@ export const useGame = <
 				if (event.type === 'game:state_updated') {
 					// Server state arrives - this is the canonical truth
 					setCanonicalGame(
-						event.state as GameState<
+						event.state as Game<
 							TConfig,
 							TPublicState,
 							TPrivateState,
+							TActionType,
 							TPhase,
 							TPhaseData
 						>,
