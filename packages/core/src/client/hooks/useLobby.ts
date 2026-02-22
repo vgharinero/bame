@@ -23,8 +23,7 @@ export interface UseLobbyReturn<TConfig extends object = object> {
 	startGame: <
 		TPublicState extends object,
 		TPrivateState extends object,
-		TActionType extends string,
-		TActionPayload extends object,
+		TActionPayloadMap extends Record<string, object>,
 		TPhase extends string,
 		TPhaseData extends object,
 	>(
@@ -32,8 +31,7 @@ export interface UseLobbyReturn<TConfig extends object = object> {
 			TConfig,
 			TPublicState,
 			TPrivateState,
-			TActionType,
-			TActionPayload,
+			TActionPayloadMap,
 			TPhase,
 			TPhaseData
 		>,

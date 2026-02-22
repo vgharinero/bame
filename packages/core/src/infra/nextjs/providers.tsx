@@ -9,7 +9,7 @@ import {
 	useStorage,
 } from '../../client/context';
 import type { User } from '../../engine/types';
-import { browserClient } from '../supabase/client/browser';
+import { browserClient } from '../supabase/client/supabase-browser';
 import {
 	SupabaseGameStorage,
 	SupabaseLobbyStorage,

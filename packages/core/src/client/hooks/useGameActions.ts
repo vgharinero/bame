@@ -6,11 +6,10 @@ import { gameActions } from '../../server/actions';
 import { useAuth, useStorage } from '../context';
 
 export interface UseGameActionsReturn<
-	TActionType extends string = string,
-	TActionPayload extends object = object,
+	TActionPayloadMap extends Record<string, object> = Record<string, object>,
 > {
 	applyAction: (
-		action: Omit<Action<TActionType, TActionPayload>, 'playerId' | 'timestamp'>,
+		action: Omit<Action<TActionPayloadMap>, 'playerId' | 'timestamp'>,
 	) => Promise<void>;
 	isApplying: boolean;
 	error: Error | null;
@@ -20,8 +19,7 @@ export const useGameActions = <
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
-	TActionType extends string = string,
-	TActionPayload extends object = object,
+	TActionPayloadMap extends Record<string, object> = Record<string, object>,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
 >(
@@ -30,8 +28,7 @@ export const useGameActions = <
 		TConfig,
 		TPublicState,
 		TPrivateState,
-		TActionType,
-		TActionPayload,
+		TActionPayloadMap,
 		TPhase,
 		TPhaseData
 	>,
@@ -39,7 +36,7 @@ export const useGameActions = <
 		TConfig,
 		TPublicState,
 		TPrivateState,
-		TActionType,
+		TActionPayloadMap,
 		TPhase,
 		TPhaseData
 	> | null,
@@ -48,12 +45,12 @@ export const useGameActions = <
 			TConfig,
 			TPublicState,
 			TPrivateState,
-			TActionType,
+			TActionPayloadMap,
 			TPhase,
 			TPhaseData
 		>,
 	) => void,
-): UseGameActionsReturn<TActionType, TActionPayload> => {
+): UseGameActionsReturn<TActionPayloadMap> => {
 	const { user } = useAuth();
 	const { gameStorage, profileStorage, realtimeStorage } = useStorage();
 
@@ -62,17 +59,14 @@ export const useGameActions = <
 
 	const applyAction = useCallback(
 		async (
-			action: Omit<
-				Action<TActionType, TActionPayload>,
-				'playerId' | 'timestamp'
-			>,
+			action: Omit<Action<TActionPayloadMap>, 'playerId' | 'timestamp'>,
 		) => {
 			if (!user) throw new Error('Not authenticated');
 			if (!currentState) throw new Error('No game state');
 
-			const fullAction: Action<TActionType, TActionPayload> = {
+			const fullAction: Action<TActionPayloadMap> = {
 				...action,
-				playerId: user.id,
+				userId: user.id,
 				timestamp: Date.now(),
 			};
 
@@ -97,7 +91,7 @@ export const useGameActions = <
 				onOptimisticUpdate(result.newState);
 
 				// 4. Send to server
-				await gameActions.applyGameAction(
+				await gameActions.handleApplyAction(
 					gameStorage,
 					profileStorage,
 					realtimeStorage,

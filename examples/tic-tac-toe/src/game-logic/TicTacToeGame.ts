@@ -16,18 +16,18 @@ export type TicTacToePublicState = {
 	playerSymbols: Record<string, 'X' | 'O'>; // playerId -> symbol
 };
 
-export type TicTacToePrivateState = {}; // No private state
+export type TicTacToePrivateState = undefined; // No private state
 
-export type TicTacToeActionType = 'place_mark';
-
-export type TicTacToeActionPayload = {
-	row: number;
-	col: number;
+export type TicTacToeActionPayloadMap = {
+	place_mark: {
+		row: number;
+		col: number;
+	};
 };
 
 export type TicTacToePhase = 'main';
 
-export type TicTacToePhaseData = {};
+export type TicTacToePhaseData = undefined;
 
 // Game implementation
 class TicTacToeGameImpl
@@ -36,8 +36,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
-			TicTacToeActionType,
-			TicTacToeActionPayload,
+			TicTacToeActionPayloadMap,
 			TicTacToePhase
 		>
 {
@@ -52,7 +51,7 @@ class TicTacToeGameImpl
 	): GameInitializationResult<
 		TicTacToePublicState,
 		TicTacToePrivateState,
-		TicTacToeActionType,
+		TicTacToeActionPayloadMap,
 		TicTacToePhase,
 		TicTacToePhaseData
 	> {
@@ -92,11 +91,11 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
-			TicTacToeActionType,
+			TicTacToeActionPayloadMap,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,
-		action: Action<TicTacToeActionType, TicTacToeActionPayload>,
+		action: Action<TicTacToeActionPayloadMap>,
 	): boolean {
 		// Check if it's player's turn
 		if (state.turn.currentPlayerId !== action.playerId) {
@@ -108,7 +107,7 @@ class TicTacToeGameImpl
 			return false;
 		}
 
-		const { row, col } = action.payload;
+		const { row, col } = action.userId;
 
 		// Check bounds
 		if (row < 0 || row > 2 || col < 0 || col > 2) {
@@ -128,13 +127,13 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
-			TicTacToeActionType,
+			TicTacToeActionPayloadMap,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,
-		action: Action<TicTacToeActionType, TicTacToeActionPayload>,
+		action: Action<TicTacToeActionPayloadMap>,
 	) {
-		const { row, col } = action.payload;
+		const { row, col } = action.userId;
 		const symbol = state.publicState.playerSymbols[action.playerId];
 
 		// Create new state with updated board
@@ -146,7 +145,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
-			TicTacToeActionType,
+			TicTacToeActionPayloadMap,
 			TicTacToePhase,
 			TicTacToePhaseData
 		> = {
@@ -174,7 +173,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
-			TicTacToeActionType,
+			TicTacToeActionPayloadMap,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,
@@ -246,7 +245,7 @@ class TicTacToeGameImpl
 			TicTacToeConfig,
 			TicTacToePublicState,
 			TicTacToePrivateState,
-			TicTacToeActionType,
+			TicTacToeActionPayloadMap,
 			TicTacToePhase,
 			TicTacToePhaseData
 		>,

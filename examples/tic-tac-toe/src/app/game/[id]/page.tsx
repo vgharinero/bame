@@ -60,7 +60,7 @@ export default function GamePage() {
 		try {
 			await applyAction({
 				type: 'place_mark',
-				payload: { row, col },
+				userId: { row, col },
 			});
 		} catch (err) {
 			console.error('Failed to place mark:', err);
@@ -86,16 +86,16 @@ export default function GamePage() {
 		<>
 			<LoadingOverlay isLoading={isBlocked} message={syncMessage} />
 
-			<div className="min-h-screen bg-gray-100 p-8">
+			<div className="bg-gray-100 p-8 min-h-screen">
 				<div className="mx-auto max-w-2xl">
 					{/* Header */}
-					<div className="mb-6 rounded-lg bg-white p-6 shadow">
-						<div className="mb-4 flex items-center justify-between">
-							<h1 className="text-2xl font-bold">Tic-Tac-Toe</h1>
+					<div className="bg-white shadow mb-6 p-6 rounded-lg">
+						<div className="flex justify-between items-center mb-4">
+							<h1 className="font-bold text-2xl">Tic-Tac-Toe</h1>
 							<button
 								type="button"
 								onClick={handleBackToLobbies}
-								className="rounded bg-gray-600 px-4 py-2 text-white hover:bg-gray-700"
+								className="bg-gray-600 hover:bg-gray-700 px-4 py-2 rounded text-white"
 							>
 								Back to Lobbies
 							</button>
@@ -119,10 +119,10 @@ export default function GamePage() {
 
 					{/* Game Over Message */}
 					{isGameOver && (
-						<div className="mb-6 rounded-lg bg-white p-6 shadow text-center">
+						<div className="bg-white shadow mb-6 p-6 rounded-lg text-center">
 							{winner ? (
 								<div>
-									<h2 className="text-2xl font-bold text-green-600 mb-2">
+									<h2 className="mb-2 font-bold text-green-600 text-2xl">
 										{winner.id === user.id
 											? 'You Win! 🎉'
 											: `${winner.displayName} Wins!`}
@@ -133,7 +133,7 @@ export default function GamePage() {
 								</div>
 							) : (
 								<div>
-									<h2 className="text-2xl font-bold text-gray-600 mb-2">
+									<h2 className="mb-2 font-bold text-gray-600 text-2xl">
 										It's a Draw! 🤝
 									</h2>
 									<p className="text-gray-600">Good game!</p>
@@ -143,8 +143,8 @@ export default function GamePage() {
 					)}
 
 					{/* Game Board */}
-					<div className="rounded-lg bg-white p-8 shadow">
-						<div className="mx-auto grid max-w-md grid-cols-3 gap-2">
+					<div className="bg-white shadow p-8 rounded-lg">
+						<div className="gap-2 grid grid-cols-3 mx-auto max-w-md">
 							{game.publicState.board.map((row, rowIndex) =>
 								row.map((cell, colIndex) => (
 									<button
@@ -172,26 +172,26 @@ export default function GamePage() {
 
 					{/* Error Display */}
 					{error && (
-						<div className="mt-4 rounded-lg bg-red-50 p-4 text-red-600">
+						<div className="bg-red-50 mt-4 p-4 rounded-lg text-red-600">
 							Error: {error.message}
 						</div>
 					)}
 
 					{/* Players List */}
-					<div className="mt-6 rounded-lg bg-white p-6 shadow">
+					<div className="bg-white shadow mt-6 p-6 rounded-lg">
 						<h3 className="mb-4 font-semibold">Players</h3>
 						<div className="space-y-2">
 							{game.players.map((player) => (
 								<div
 									key={player.id}
-									className="flex items-center justify-between rounded bg-gray-50 p-3"
+									className="flex justify-between items-center bg-gray-50 p-3 rounded"
 								>
 									<div className="flex items-center gap-3">
 										{player.avatarUrl && (
 											<img
 												src={player.avatarUrl}
 												alt={player.displayName}
-												className="h-10 w-10 rounded-full"
+												className="rounded-full w-10 h-10"
 											/>
 										)}
 										<div>
@@ -199,7 +199,7 @@ export default function GamePage() {
 												{player.displayName}
 												{player.id === user.id && ' (You)'}
 											</p>
-											<p className="text-sm text-gray-600">
+											<p className="text-gray-600 text-sm">
 												Playing as: {game.publicState.playerSymbols[player.id]}
 											</p>
 										</div>

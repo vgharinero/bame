@@ -11,7 +11,7 @@ export interface UseGameReturn<
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
-	TActionType extends string = string,
+	TActionPayloadMap extends Record<string, object> = Record<string, object>,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
 > {
@@ -19,7 +19,7 @@ export interface UseGameReturn<
 		TConfig,
 		TPublicState,
 		TPrivateState,
-		TActionType,
+		TActionPayloadMap,
 		TPhase,
 		TPhaseData
 	> | null;
@@ -34,7 +34,7 @@ export interface UseGameReturn<
 			TConfig,
 			TPublicState,
 			TPrivateState,
-			TActionType,
+			TActionPayloadMap,
 			TPhase,
 			TPhaseData
 		>,
@@ -47,7 +47,7 @@ export const useGame = <
 	TConfig extends object = object,
 	TPublicState extends object = object,
 	TPrivateState extends object = object,
-	TActionType extends string = string,
+	TActionPayloadMap extends Record<string, object> = Record<string, object>,
 	TPhase extends string = string,
 	TPhaseData extends object = object,
 >(
@@ -56,7 +56,7 @@ export const useGame = <
 	TConfig,
 	TPublicState,
 	TPrivateState,
-	TActionType,
+	TActionPayloadMap,
 	TPhase,
 	TPhaseData
 > => {
@@ -68,7 +68,7 @@ export const useGame = <
 		TConfig,
 		TPublicState,
 		TPrivateState,
-		TActionType,
+		TActionPayloadMap,
 		TPhase,
 		TPhaseData
 	> | null>(null);
@@ -78,7 +78,7 @@ export const useGame = <
 		TConfig,
 		TPublicState,
 		TPrivateState,
-		TActionType,
+		TActionPayloadMap,
 		TPhase,
 		TPhaseData
 	> | null>(null);
@@ -98,7 +98,7 @@ export const useGame = <
 				TConfig,
 				TPublicState,
 				TPrivateState,
-				TActionType,
+				TActionPayloadMap,
 				TPhase,
 				TPhaseData
 			>(gameId);
@@ -141,7 +141,7 @@ export const useGame = <
 							TConfig,
 							TPublicState,
 							TPrivateState,
-							TActionType,
+							TActionPayloadMap,
 							TPhase,
 							TPhaseData
 						>,

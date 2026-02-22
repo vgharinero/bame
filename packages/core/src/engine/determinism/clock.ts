@@ -1,14 +1,14 @@
-export interface TurnTimerConfig {
+export type TurnTimerConfig = {
 	maxTurnDurationMs: number | null;
 	warningThresholdMs?: number;
 	autoEndTurnOnExpire?: boolean;
-}
+};
 
-export interface TurnTimer {
+export type TurnTimer = {
 	turnStartedAt: number;
 	pausedAt?: number;
 	accumulatedTimeMs?: number;
-}
+};
 
 export const isTurnExpired = (
 	timer: TurnTimer,
@@ -86,8 +86,7 @@ export const pauseTurnTimer = (
 	}
 
 	const accumulated =
-		(timer.accumulatedTimeMs ?? 0) +
-		(currentTimestamp - timer.turnStartedAt);
+		(timer.accumulatedTimeMs ?? 0) + (currentTimestamp - timer.turnStartedAt);
 
 	return {
 		...timer,
