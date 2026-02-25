@@ -15,8 +15,8 @@ type PhaseMetadata<
 	: {};
 
 export type Action<
-	TActionPayloadMap extends PerspectiveMap,
-	TPhasePayloadMap extends PerspectiveMap,
+	TActionPayloadMap extends PerspectiveMap = PerspectiveMap,
+	TPhasePayloadMap extends PerspectiveMap = PerspectiveMap,
 	TPerspective extends keyof Perspective = 'private',
 > = {
 	userId: string;

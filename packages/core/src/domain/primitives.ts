@@ -14,7 +14,6 @@ export type DiscriminatedFields<
 	>;
 }[keyof TMap];
 
-
 export type Perspective<
 	TPrivate extends Payload = Payload,
 	TPublic extends Payload = Payload,
@@ -22,6 +21,9 @@ export type Perspective<
 	private: TPrivate;
 	public: TPublic;
 };
+
+export type Public<TPublic extends Payload> = Perspective<TPublic, TPublic>;
+export type Private<TPrivate extends Payload> = Perspective<TPrivate, never>;
 
 export type PerspectiveMap = Record<string, Perspective>;
 
