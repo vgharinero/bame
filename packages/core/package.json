@@ -8,8 +8,8 @@
 			"default": "./dist/engine/index.js"
 		},
 		"./storage": {
-			"types": "./dist/storage/index.d.ts",
-			"default": "./dist/storage/index.js"
+			"types": "./dist/engine/storage/index.d.ts",
+			"default": "./dist/engine/storage/index.js"
 		},
 		"./client": {
 			"types": "./dist/client/index.d.ts",
