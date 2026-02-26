@@ -71,7 +71,7 @@ export namespace GameMapper {
 				status: gameRecord.status as GameStatus,
 				config: gameRecord.config as TConfig,
 				seed: gameRecord.seed,
-				publicState: gameRecord.publicState as TPublicState,
+				state: gameRecord.publicState as TPublicState,
 				players: playerRecordsWithPublicUserInfo.map((p) =>
 					PlayerMapper.toDomain(p.playerRecord, p.publicUserInfo),
 				),
@@ -105,7 +105,7 @@ export namespace GameMapper {
 		if (partialGameRecord.seed !== undefined)
 			result.seed = partialGameRecord.seed;
 		if (partialGameRecord.publicState !== undefined)
-			result.publicState = partialGameRecord.publicState as TPublicState;
+			result.state = partialGameRecord.publicState as TPublicState;
 		if (partialGameRecord.currentTurn !== undefined)
 			result.turn = partialGameRecord.currentTurn as Turn<
 				TActionPayloadMap,
@@ -146,7 +146,7 @@ export namespace GameMapper {
 				status: game.status,
 				config: game.config as Serializable,
 				seed: game.seed,
-				publicState: game.publicState as Serializable,
+				publicState: game.state as Serializable,
 				currentTurn: game.turn as Serializable,
 				winnerId: game.winner,
 				startedAt: game.startedAt,

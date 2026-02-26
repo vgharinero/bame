@@ -16,14 +16,16 @@ export const isPublicLobby = (lobby: Lobby) => !lobby.code;
 export type LobbyStatus = 'waiting' | 'ready' | 'starting' | 'transitioned';
 
 export type Lobby<TConfig extends Payload = Payload> = VersionedEntity & {
-	code?: string; // 4-char join code
-	hostId: string;
-
+	readonly id: string;
+	readonly code: string | null; // 4-char join code
+	readonly hostId: string;
+	
+	readonly minPlayers: number;
+	readonly maxPlayers: number;
+	
 	status: LobbyStatus;
 	members: LobbyMember[];
 
-	minPlayers: number;
-	maxPlayers: number;
 	gameConfig: TConfig;
 
 	transitionedAt?: number; // timestamp of when the lobby transitioned to a game

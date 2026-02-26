@@ -1,47 +1,25 @@
 import type { TurnTimer } from '../determinism';
-import type { PayloadMap } from '../primitives';
+import type { Keys } from '../primitives';
 import type {
-	DiscriminatedFields,
-	FromPerspective,
-	Perspective,
+	EitherVizFields,
+	FromVizUnionFields,
 	PerspectiveMap,
-} from './primitives';
-
-// export type Turn<
-// 	TActionPayloadMap extends PayloadMap = PayloadMap,
-// 	TPhasePayloadMap extends PayloadMap = PayloadMap,
-// > = {
-// 	currentPlayerId: string;
-// 	allowedActions: Array<keyof TActionPayloadMap>;
-// 	requiredActions?: Array<keyof TActionPayloadMap>;
-// 	number: number;
-// 	startedAt?: number;
-// 	timer?: TurnTimer;
-// } & DiscriminatedFields<TPhasePayloadMap, 'phase', 'phaseData'>;
-
-type ActionMetadata<
-	TActionPayloadMap extends PerspectiveMap,
-	TPerspective extends keyof Perspective,
-> = TPerspective extends 'private'
-	? {
-			allowedActions: keyof TActionPayloadMap[];
-			requiredActions?: keyof TActionPayloadMap[];
-		}
-	: {};
+	Viz,
+} from './perspective';
 
 export type Turn<
-	TActionPayloadMap extends PerspectiveMap = PerspectiveMap,
-	TPhasePayloadMap extends PerspectiveMap = PerspectiveMap,
-	TPerspective extends keyof Perspective = 'private',
+	TActionMap extends PerspectiveMap = PerspectiveMap,
+	TPhaseMap extends PerspectiveMap = PerspectiveMap,
+	TViz extends Viz = 'private',
 > = {
-	currentPlayerId: string;
+	userId: string;
 	number: number;
-	startedAt?: number;
 	timer?: TurnTimer;
-} & ActionMetadata<TActionPayloadMap, TPerspective> &
+} & EitherVizFields<
+	TViz,
 	{
-		[K in keyof TPhasePayloadMap]: {
-			phase: K;
-			phaseData: FromPerspective<TPhasePayloadMap[K], TPerspective>;
-		};
-	}[keyof TPhasePayloadMap];
+		allowedActions: Keys<TActionMap>[];
+		requiredActions?: Keys<TActionMap>[];
+	}
+> &
+	FromVizUnionFields<'phase', 'phaseData', TPhaseMap, TViz>;

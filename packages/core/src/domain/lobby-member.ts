@@ -3,9 +3,10 @@ import type { VersionedEntity } from './versioned';
 
 export type LobbyMemberStatus = 'in_lobby' | 'ready' | 'synced';
 
-export type MemberId = { lobbyId: string; userId: string };
-
-export type LobbyMember = VersionedEntity<MemberId> &
+export type LobbyMember = VersionedEntity &
 	PublicUserInfo & {
+		userId: string;
+		lobbyId: string;
+
 		status: LobbyMemberStatus;
 	};

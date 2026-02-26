@@ -1,4 +1,4 @@
-import type { Public } from '../primitives';
+import type { Public } from '../perspective';
 
 export type TestConfig = {
 	maxPlayers: number;

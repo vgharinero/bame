@@ -43,11 +43,11 @@ export const transitionLobbyToGame = async <
 	const seed = `${lobbyId}_${Date.now()}_${Math.random()}`;
 
 	const playerIds = lobby.members.map((m) => m.id.userId);
-	const { publicState, initialPrivateStates, initialTurn } = engine.initialize(
-		lobby.gameConfig,
-		playerIds,
-		seed,
-	);
+	const {
+		state: publicState,
+		playerStates: initialPrivateStates,
+		initialTurn,
+	} = engine.initialize(lobby.gameConfig, playerIds, seed);
 
 	const game = await gameStorage.createGameFromLobby<
 		TConfig,
@@ -119,9 +119,7 @@ export const handleGetGame = async <
 		if (p.id.userId !== userId) {
 			return {
 				...p,
-				privateState: engine.getSimplifiedPrivateState(
-					p.privateState,
-				) as TPrivateState,
+				state: engine.getSimplifiedPrivateState(p.state) as TPrivateState,
 			};
 		}
 		return p;

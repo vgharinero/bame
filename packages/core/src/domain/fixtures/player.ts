@@ -13,6 +13,6 @@ export const createMockPlayer = (
 	displayName: `Player ${userId}`,
 	avatarUrl: null,
 	status,
-	privateState: { hand: [] },
+	state: { hand: [] },
 	...overrides,
 });

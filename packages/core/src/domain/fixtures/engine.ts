@@ -4,7 +4,7 @@ import type { Game } from '../game';
 import type {
 	ApplyActionResult,
 	CheckGameEndResult,
-	GameInitializationResult,
+	InitializationResult,
 	ValidateActionResult,
 } from '../results';
 import type {
@@ -43,16 +43,14 @@ export const createMockEngine = (
 		_config: TestConfig,
 		playerIds: string[],
 		_seed: string,
-	): GameInitializationResult<
+	): InitializationResult<
 		TestPublicState,
 		TestPrivateState,
 		TestActionPayloadMap,
 		TestPhasePayloadMap
 	> => ({
-		publicState: { board: [] },
-		initialPrivateStates: Object.fromEntries(
-			playerIds.map((id) => [id, { hand: [] }]),
-		),
+		state: { board: [] },
+		playerStates: Object.fromEntries(playerIds.map((id) => [id, { hand: [] }])),
 		initialTurn: {
 			currentPlayerId: playerIds[0],
 			allowedActions: ['move', 'pass'],
@@ -107,7 +105,9 @@ export const createMockEngine = (
 		isFinished: false,
 	}),
 
-	getEnemyState: (state: TestPrivateState) => ({ handCount: state.hand.length }),
+	getEnemyState: (state: TestPrivateState) => ({
+		handCount: state.hand.length,
+	}),
 
 	...overrides,
 });

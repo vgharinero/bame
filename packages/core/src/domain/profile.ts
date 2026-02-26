@@ -8,6 +8,8 @@ export type ProfileStats = {
 	totalGames: number;
 };
 
-export type Profile = VersionedEntity & PublicUserInfo & {
-	stats: ProfileStats;
-}
+export type Profile = VersionedEntity &
+	PublicUserInfo & {
+		userId: string;
+		stats: ProfileStats;
+	};

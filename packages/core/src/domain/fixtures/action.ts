@@ -1,13 +1,14 @@
-import type { Action, ActionPayloadMap } from '../action';
+import type { Action } from '../action';
+import type { PerspectiveMap } from '../perspective';
 
 import type { TestActionPayloadMap, TestPhasePayloadMap } from './domain';
 
-type ActionOverride<TActionPayloadMap extends ActionPayloadMap> =
+type ActionOverride<TActionPayloadMap extends PerspectiveMap> =
 	| { type?: never; payload?: never } // Neither provided
 	| {
 			[K in keyof TActionPayloadMap]: {
 				type: K;
-				payload: TActionPayloadMap[K]['complete'];
+				payload: TActionPayloadMap[K]['private'];
 			};
 	  }[keyof TActionPayloadMap]; // Both provided together
 
@@ -17,12 +18,10 @@ export const createMockAction = (
 	> &
 		ActionOverride<TestActionPayloadMap>,
 ): Action<TestActionPayloadMap, TestPhasePayloadMap> => {
+
 	return {
 		userId: overrides?.userId ?? 'user-1',
 		timestamp: overrides?.timestamp ?? Date.now(),
-		type: overrides?.type ?? ('move' as keyof TestActionPayloadMap),
-		payload:
-			overrides?.payload ??
-			({ position: 0 } as unknown as TestActionPayloadMap[keyof TestActionPayloadMap]),
-	} as Action<TestActionPayloadMap, TestPhasePayloadMap>;
+		...
+	};
 };

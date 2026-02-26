@@ -1,30 +1,23 @@
+import type { Keys } from '../primitives';
 import type {
-	FromPerspective,
+	EitherVizFields,
+	FromVizUnionFields,
 	Perspective,
 	PerspectiveMap,
-} from './primitives';
-
-type PhaseMetadata<
-	TPhasePayloadMap extends PerspectiveMap,
-	TPerspective extends keyof Perspective,
-> = TPerspective extends 'private'
-	? {
-			advancesPhase?: boolean;
-			requiredPhase?: keyof TPhasePayloadMap;
-		}
-	: {};
+} from './perspective';
 
 export type Action<
 	TActionPayloadMap extends PerspectiveMap = PerspectiveMap,
 	TPhasePayloadMap extends PerspectiveMap = PerspectiveMap,
-	TPerspective extends keyof Perspective = 'private',
+	TPerspectiveKey extends keyof Perspective = 'private',
 > = {
 	userId: string;
 	timestamp: number;
-} & PhaseMetadata<TPhasePayloadMap, TPerspective> &
+} & EitherVizFields<
+	TPerspectiveKey,
 	{
-		[K in keyof TActionPayloadMap]: {
-			type: K;
-			payload: FromPerspective<TActionPayloadMap[K], TPerspective>;
-		};
-	}[keyof TActionPayloadMap];
+		advancesPhase?: boolean;
+		requiredPhase?: Keys<TPhasePayloadMap>;
+	}
+> &
+	FromVizUnionFields<'type', 'data', TActionPayloadMap, TPerspectiveKey>;

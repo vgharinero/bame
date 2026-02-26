@@ -33,7 +33,7 @@ export const createMockGame = (
 	status: 'active',
 	config: { maxPlayers: 4 },
 	seed: 'test-seed',
-	publicState: { board: [] },
+	state: { board: [] },
 	players: [createMockPlayer('user-1'), createMockPlayer('user-2')],
 	turn: createMockTurn(),
 	...overrides,

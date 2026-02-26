@@ -1,5 +1,4 @@
-export type VersionedEntity<TIdentifier = string> = {
-	id: TIdentifier;
+export type VersionedEntity = {
 	version: number;
 	createdAt: number;
 	updatedAt: number;

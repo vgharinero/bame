@@ -1,34 +1,31 @@
-import type { Payload, PayloadMap } from '../primitives';
-import type { Game } from './game';
+import type { Payload } from '../primitives';
+import type { GameStatus } from './game';
+import type { Perspective, PerspectiveMap } from './perspective';
 import type { Turn } from './turn';
 
-export type GameInitializationResult<
-	TPublicState extends Payload,
-	TPrivateState extends Payload,
-	TActionPayloadMap extends PayloadMap,
-	TPhasePayloadMap extends PayloadMap,
+export type InitializationResult<
+	TState extends Payload,
+	TPlayerState extends Perspective,
+	TActionMap extends PerspectiveMap,
+	TPhaseMap extends PerspectiveMap,
 > = {
-	publicState: TPublicState;
-	initialPrivateStates: Record<string, TPrivateState>;
-	initialTurn: Turn<TActionPayloadMap, TPhasePayloadMap>;
+	state: TState;
+	playerStates: Record<string, TPlayerState>;
+	initialTurn: Turn<TActionMap, TPhaseMap>;
 };
 
 export type ApplyActionResult<
-	TConfig extends Payload,
-	TPublicState extends Payload,
-	TPrivateState extends Payload,
-	TActionPayloadMap extends PayloadMap,
-	TPhasePayloadMap extends PayloadMap,
+	TState extends Payload,
+	TPlayerState extends Perspective,
+	TActionMap extends PerspectiveMap,
+	TPhaseMap extends PerspectiveMap,
 > =
 	| {
 			success: true;
-			newGame: Game<
-				TConfig,
-				TPublicState,
-				TPrivateState,
-				TActionPayloadMap,
-				TPhasePayloadMap
-			>;
+			state: TState;
+			playerStates: Record<string, TPlayerState>;
+			newStatus?: GameStatus;
+			newTurn?: Turn<TActionMap, TPhaseMap>;
 	  }
 	| {
 			success: false;

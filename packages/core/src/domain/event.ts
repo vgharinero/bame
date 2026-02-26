@@ -1,41 +1,41 @@
-import type { Payload, PayloadMap } from '../primitives';
+import type { Keys, Payload } from '../primitives';
 import type { Action } from './action';
-import type { ClientGame, Game } from './game';
-import type { Lobby, PublicLobby } from './lobby';
+import type { Game, GameStatus } from './game';
+import type { LobbyStatus, PublicLobby } from './lobby';
 import type { LobbyMember } from './lobby-member';
+import type { Perspective, PerspectiveMap } from './perspective';
 import type { Player } from './player';
 import type { ProfileStats } from './profile';
+import type { Turn } from './turn';
 
 export type DomainEvent<
 	TType extends string = string,
-	TPayload extends Payload | undefined = Payload | undefined,
+	TPayload extends Payload = Payload,
 > = {
 	type: TType;
 	version: number;
 	payload?: TPayload;
 };
 
-type CreateDomainEvents<TMap extends Record<string, Payload | undefined>> = {
-	[K in keyof TMap & string]: DomainEvent<K, TMap[K]>;
-}[keyof TMap & string];
+type CreateDomainEvents<TMap extends Record<string, Payload>> = {
+	[K in Keys<TMap>]: DomainEvent<K, TMap[K]>;
+}[Keys<TMap>];
 
 type ProfilePayloads = {
-	'profile:new_avatar': { avatarUrl: string };
-	'profile:new_stats': { statsDelta: Partial<ProfileStats> };
+	'profile:avatar_updated': { avatarUrl: string };
+	'profile:stats_updated': { statsDelta: Partial<ProfileStats> };
 };
 
 export type ProfileDomainEvent = CreateDomainEvents<ProfilePayloads>;
 
 type LobbyPayloads<TConfig extends Payload> = {
-	'lobby:updated': { lobby: Partial<Lobby<TConfig>> };
+	'lobby:status_updated': { status: LobbyStatus };
+	'lobby:transitioned': null;
+	'lobby:config_updated': { config: TConfig };
 	'lobby:member_joined': { member: LobbyMember };
+	'lobby:member_left': { userId: string };
 	'lobby:member_ready': { userId: string };
 	'lobby:member_not_ready': { userId: string };
-	'lobby:ready_to_start': undefined;
-	'lobby:not_ready_to_start': undefined;
-	'lobby:member_left': { userId: string };
-	'lobby:transitioned': { gameId: string };
-	'lobby:deleted': { lobbyId: string };
 };
 
 export type LobbyDomainEvent<TConfig extends Payload> = CreateDomainEvents<
@@ -43,50 +43,39 @@ export type LobbyDomainEvent<TConfig extends Payload> = CreateDomainEvents<
 >;
 
 type LobbiesPayloads = {
-	'lobbies:available_public_lobby': { lobby: PublicLobby };
-	'lobbies:updated_public_lobby': { lobby: PublicLobby };
-	'lobbies:removed_public_lobby': { lobbyId: string };
+	'lobbies:available': { lobby: PublicLobby };
+	'lobbies:with_room': { lobbyId: string };
+	'lobbies:full': { lobbyId: string };
+	'lobbies:removed': { lobbyId: string };
 };
 
 export type LobbiesDomainEvent = CreateDomainEvents<LobbiesPayloads>;
 
 type GamePayloads<
 	TConfig extends Payload,
-	TPublicState extends Payload,
-	TPrivateState extends Payload,
-	TActionPayloadMap extends PayloadMap,
-	TPhasePayloadMap extends PayloadMap,
+	TState extends Payload,
+	TPlayerState extends Perspective,
+	TActionMap extends PerspectiveMap,
+	TPhaseMap extends PerspectiveMap,
 > = {
-	'game:updated': {
-		game: Game<
-			TConfig,
-			TPublicState,
-			TPrivateState,
-			TActionPayloadMap,
-			TPhasePayloadMap
-		>;
-	};
-	'game:player_updated': { playerId: string; state: TPrivateState };
-	'game:action_applied': {
-		action: Action<TActionPayloadMap, TPhasePayloadMap>;
-	};
-	'game:player_disconnected': { playerId: string };
-	'game:player_reconnected': { playerId: string };
-	'game:finished': { winner?: string; isDraw?: boolean };
+	'game:state_updated': { state: TState };
+	'game:status_updated': { status: GameStatus };
+	'game:player_st': Player<TPlayerState>;
+	'game:enemy_updated': Player<TPlayerState, 'public'>;
+	'game:turn_updated': Turn<TActionMap, TPhaseMap>;
+	'game:enemy_turn_updated': Turn<TActionMap, TPhaseMap, 'public'>;
+	'game:action_completed': Action<TActionMap, TPhaseMap>;
+	'game:enemy_action_completed': Action<TActionMap, TPhaseMap, 'public'>;
+	'game:invalid_action': { reason: string };
+	'game:finished': Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>; // TODO: leaner event?
 };
 
 export type GameDomainEvent<
 	TConfig extends Payload,
-	TPublicState extends Payload,
-	TPrivateState extends Payload,
-	TActionPayloadMap extends PayloadMap,
-	TPhasePayloadMap extends PayloadMap,
+	TState extends Payload,
+	TPlayerState extends Perspective,
+	TActionMap extends PerspectiveMap,
+	TPhaseMap extends PerspectiveMap,
 > = CreateDomainEvents<
-	GamePayloads<
-		TConfig,
-		TPublicState,
-		TPrivateState,
-		TActionPayloadMap,
-		TPhasePayloadMap
-	>
+	GamePayloads<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>
 >;

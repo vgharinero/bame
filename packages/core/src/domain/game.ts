@@ -1,4 +1,10 @@
-import type { Payload, PayloadMap } from '../primitives';
+import type { Payload } from '../primitives';
+import type {
+	EitherVizFields,
+	Perspective,
+	PerspectiveMap,
+	Viz,
+} from './perspective';
 import type { Player } from './player';
 import type { Turn } from './turn';
 import type { VersionedEntity } from './versioned';
@@ -12,46 +18,31 @@ export type GameStatus =
 
 export type Game<
 	TConfig extends Payload = Payload,
-	TPublicState extends Payload = Payload,
-	TPrivateState extends Payload = Payload,
-	TActionPayloadMap extends PayloadMap = PayloadMap,
-	TPhasePayloadMap extends PayloadMap = PayloadMap,
+	TState extends Payload = Payload,
+	TPlayerState extends Perspective = Perspective,
+	TActionMap extends PerspectiveMap = PerspectiveMap,
+	TPhaseMap extends PerspectiveMap = PerspectiveMap,
+	TViz extends Viz = 'private',
 > = VersionedEntity & {
+	readonly id: string;
+	readonly config: TConfig;
+	readonly seed: string;
+
 	status: GameStatus;
-
-	config: TConfig;
-	seed: string;
-
-	publicState: TPublicState;
-	players: Player<TPrivateState>[];
-
-	turn: Turn<TActionPayloadMap, TPhasePayloadMap>;
+	state: TState;
 
 	winner?: string;
-
-	startedAt?: number;
+	startedAt?: number; // all players synced
 	finishedAt?: number;
-};
-
-export type ClientGame<
-	TConfig extends Payload = Payload,
-	TPublicState extends Payload = Payload,
-	TPrivateState extends Payload = Payload,
-	TEnemyState extends Payload = Payload,
-	TActionPayloadMap extends PayloadMap = PayloadMap,
-	TPhasePayloadMap extends PayloadMap = PayloadMap,
-> = Omit<
-	Game<
-		TConfig,
-		TPublicState,
-		TPrivateState,
-		TActionPayloadMap,
-		TPhasePayloadMap
-	>,
-	'players'
-> & {
-	player: Player<TPrivateState>;
-	enemies: (Omit<Player<TPrivateState>, 'privateState'> & {
-		simplifiedPrivateState: TEnemyState;
-	})[];
-};
+} & EitherVizFields<
+		TViz,
+		{
+			players: Player<TPlayerState>[];
+			turn: Turn<TActionMap, TPhaseMap>;
+		},
+		{
+			player: Player<TPlayerState>;
+			enemies: Player<TPlayerState, 'public'>[];
+			turn: Turn<TActionMap, TPhaseMap, Viz>;
+		}
+	>;

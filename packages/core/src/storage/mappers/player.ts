@@ -13,7 +13,7 @@ export namespace PlayerMapper {
 			createdAt: playerRecord.createdAt,
 			updatedAt: playerRecord.updatedAt,
 			status: playerRecord.status as PlayerStatus,
-			privateState: playerRecord.privateState as TPrivateState,
+			state: playerRecord.privateState as TPrivateState,
 			displayName: publicUserInfo.displayName,
 			avatarUrl: publicUserInfo.avatarUrl,
 		};
@@ -32,7 +32,7 @@ export namespace PlayerMapper {
 			status: player.status,
 			gameId: player.id.gameId,
 			userId: player.id.userId,
-			privateState: player.privateState as Serializable,
+			privateState: player.state as Serializable,
 		};
 	};
 }
