@@ -1,9 +1,8 @@
 import type { Keys, Payload } from '../primitives';
 import type { Action } from './action';
-import type { Game, GameStatus } from './game';
+import type { Game, GameDefinition, GameStatus } from './game';
 import type { LobbyStatus, PublicLobby } from './lobby';
 import type { LobbyMember } from './lobby-member';
-import type { Perspective, PerspectiveMap } from './perspective';
 import type { Player } from './player';
 import type { ProfileStats } from './profile';
 import type { Turn } from './turn';
@@ -51,31 +50,27 @@ type LobbiesPayloads = {
 
 export type LobbiesDomainEvent = CreateDomainEvents<LobbiesPayloads>;
 
-type GamePayloads<
-	TConfig extends Payload,
-	TState extends Payload,
-	TPlayerState extends Perspective,
-	TActionMap extends PerspectiveMap,
-	TPhaseMap extends PerspectiveMap,
-> = {
-	'game:state_updated': { state: TState };
+type GamePayloads<TDef extends GameDefinition> = {
+	'game:state_updated': { state: TDef['State'] };
 	'game:status_updated': { status: GameStatus };
-	'game:player_st': Player<TPlayerState>;
-	'game:enemy_updated': Player<TPlayerState, 'public'>;
-	'game:turn_updated': Turn<TActionMap, TPhaseMap>;
-	'game:enemy_turn_updated': Turn<TActionMap, TPhaseMap, 'public'>;
-	'game:action_completed': Action<TActionMap, TPhaseMap>;
-	'game:enemy_action_completed': Action<TActionMap, TPhaseMap, 'public'>;
+	'game:turn_updated': Turn<TDef['ActionMap'], TDef['PhaseMap']>;
+	'game:enemy_turn_updated': Turn<
+		TDef['ActionMap'],
+		TDef['PhaseMap'],
+		'public'
+	>;
+	'game:player_updated': Player<TDef['PlayerState']>;
+	'game:enemy_updated': Player<TDef['PlayerState'], 'public'>;
+	'game:action_completed': Action<TDef['ActionMap'], TDef['PhaseMap']>;
+	'game:enemy_action_completed': Action<
+		TDef['ActionMap'],
+		TDef['PhaseMap'],
+		'public'
+	>;
 	'game:invalid_action': { reason: string };
-	'game:finished': Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>; // TODO: leaner event?
+	'game:finished': Game<TDef>; // TODO: leaner event?
 };
 
-export type GameDomainEvent<
-	TConfig extends Payload,
-	TState extends Payload,
-	TPlayerState extends Perspective,
-	TActionMap extends PerspectiveMap,
-	TPhaseMap extends PerspectiveMap,
-> = CreateDomainEvents<
-	GamePayloads<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>
+export type GameDomainEvent<TDef extends GameDefinition> = CreateDomainEvents<
+	GamePayloads<TDef>
 >;

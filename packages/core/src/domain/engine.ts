@@ -1,7 +1,5 @@
-import type { Payload } from '../primitives';
 import type { Action } from './action';
-import type { Game } from './game';
-import type { Perspective, PerspectiveMap } from './perspective';
+import type { Game, GameDefinition } from './game';
 import type { Player } from './player';
 import type {
 	ApplyActionResult,
@@ -11,59 +9,47 @@ import type {
 } from './results';
 import type { Turn } from './turn';
 
-export type Engine<
-	TConfig extends Payload,
-	TState extends Payload,
-	TPlayerState extends Perspective,
-	TActionMap extends PerspectiveMap,
-	TPhaseMap extends PerspectiveMap,
-> = {
+export type Engine<TDef extends GameDefinition> = {
 	name: string;
 	minPlayers: number;
 	maxPlayers: number;
 
 	initialize(
-		config: TConfig,
+		config: TDef['Config'],
 		playerIds: string[],
 		seed: string,
-	): InitializationResult<TState, TPlayerState, TActionMap, TPhaseMap>;
+	): InitializationResult<TDef>;
 
-	projectPlayer(player: Player<TPlayerState>): Player<TPlayerState, 'public'>;
+	projectPlayer(
+		player: Player<TDef['PlayerState']>,
+	): Player<TDef['PlayerState'], 'public'>;
 
 	projectAction(
-		action: Action<TActionMap, TPhaseMap>,
-	): Action<TActionMap, TPhaseMap, 'public'>;
+		action: Action<TDef['ActionMap'], TDef['PhaseMap']>,
+	): Action<TDef['ActionMap'], TDef['PhaseMap'], 'public'>;
 
 	projectTurn(
-		turn: Turn<TActionMap, TPhaseMap>,
-	): Turn<TActionMap, TPhaseMap, 'public'>;
+		turn: Turn<TDef['ActionMap'], TDef['PhaseMap']>,
+	): Turn<TDef['ActionMap'], TDef['PhaseMap'], 'public'>;
 
 	validateAction(
-		game: Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>,
-		action: Action<TActionMap, TPhaseMap>,
+		game: Game<TDef>,
+		action: Action<TDef['ActionMap'], TDef['PhaseMap']>,
 	): ValidateActionResult;
 
 	applyAction(
-		game: Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>,
-		action: Action<TActionMap, TPhaseMap>,
-	): ApplyActionResult<TState, TPlayerState, TActionMap, TPhaseMap>;
+		game: Game<TDef>,
+		action: Action<TDef['ActionMap'], TDef['PhaseMap']>,
+	): ApplyActionResult<TDef>;
 
-	checkGameEnd(
-		game: Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>,
-	): CheckGameEndResult;
+	checkGameEnd(game: Game<TDef>): CheckGameEndResult;
 };
 
-export const projectGame = <
-	TConfig extends Payload,
-	TState extends Payload,
-	TPlayerState extends Perspective,
-	TActionMap extends PerspectiveMap,
-	TPhaseMap extends PerspectiveMap,
->(
-	engine: Engine<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>,
-	game: Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap>,
+export const projectGame = <TDef extends GameDefinition>(
+	engine: Engine<TDef>,
+	game: Game<TDef>,
 	userId: string,
-): Game<TConfig, TState, TPlayerState, TActionMap, TPhaseMap, 'public'> => {
+): Game<TDef, 'public'> => {
 	const [player, enemies] = game.players.reduce(
 		(acc, item) => {
 			if (item.userId === userId && !acc[0]) acc[0] = item;
@@ -71,8 +57,8 @@ export const projectGame = <
 			return acc;
 		},
 		[null as any, []] as [
-			Player<TPlayerState>,
-			Player<TPlayerState, 'public'>[],
+			Player<TDef['PlayerState']>,
+			Player<TDef['PlayerState'], 'public'>[],
 		],
 	);
 

@@ -9,7 +9,7 @@ import type { Payload, PayloadMap } from '../../primitives';
 import type { RealtimeChannel, RealtimeDataSource } from './data-source';
 
 export type RealtimeCallback<
-	TDomainEvent extends DomainEvent<string, Payload | undefined>,
+	TDomainEvent extends DomainEvent<string, Payload>,
 > = (event: TDomainEvent) => void | Promise<void>;
 
 export class RealtimeAdapter {

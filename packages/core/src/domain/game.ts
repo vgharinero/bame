@@ -16,33 +16,37 @@ export type GameStatus =
 	| 'finished'
 	| 'aborted';
 
+export interface GameDefinition {
+	Config: Payload;
+	State: Payload;
+	PlayerState: Perspective;
+	ActionMap: PerspectiveMap;
+	PhaseMap: PerspectiveMap;
+}
+
 export type Game<
-	TConfig extends Payload = Payload,
-	TState extends Payload = Payload,
-	TPlayerState extends Perspective = Perspective,
-	TActionMap extends PerspectiveMap = PerspectiveMap,
-	TPhaseMap extends PerspectiveMap = PerspectiveMap,
+	TDef extends GameDefinition,
 	TViz extends Viz = 'private',
 > = VersionedEntity & {
-	readonly id: string;
-	readonly config: TConfig;
-	readonly seed: string;
+	id: string;
+	config: TDef['Config'];
+	seed: string;
 
 	status: GameStatus;
-	state: TState;
+	state: TDef['State'];
 
 	winner?: string;
-	startedAt?: number; // all players synced
+	startedAt?: number;
 	finishedAt?: number;
 } & EitherVizFields<
 		TViz,
 		{
-			players: Player<TPlayerState>[];
-			turn: Turn<TActionMap, TPhaseMap>;
+			players: Player<TDef['PlayerState']>[];
+			turn: Turn<TDef['ActionMap'], TDef['PhaseMap']>;
 		},
 		{
-			player: Player<TPlayerState>;
-			enemies: Player<TPlayerState, 'public'>[];
-			turn: Turn<TActionMap, TPhaseMap, Viz>;
+			player: Player<TDef['PlayerState']>;
+			enemies: Player<TDef['PlayerState'], 'public'>[];
+			turn: Turn<TDef['ActionMap'], TDef['PhaseMap'], Viz>;
 		}
 	>;

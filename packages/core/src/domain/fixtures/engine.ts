@@ -10,31 +10,13 @@ import type {
 import type {
 	TestActionPayloadMap,
 	TestConfig,
-	TestEnemyState,
-	TestPhasePayloadMap,
-	TestPrivateState,
-	TestPublicState,
+	TestGameDef,
+	TestPhasePayloadMap
 } from './domain';
 
 export const createMockEngine = (
-	overrides?: Partial<
-		Engine<
-			TestConfig,
-			TestPublicState,
-			TestPrivateState,
-			TestEnemyState,
-			TestActionPayloadMap,
-			TestPhasePayloadMap
-		>
-	>,
-): Engine<
-	TestConfig,
-	TestPublicState,
-	TestPrivateState,
-	TestEnemyState,
-	TestActionPayloadMap,
-	TestPhasePayloadMap
-> => ({
+	overrides?: Partial<Engine<TestGameDef>>,
+): Engine<TestGameDef> => ({
 	name: 'TestEngine',
 	minPlayers: 2,
 	maxPlayers: 4,
@@ -43,16 +25,16 @@ export const createMockEngine = (
 		_config: TestConfig,
 		playerIds: string[],
 		_seed: string,
-	): InitializationResult<
-		TestPublicState,
-		TestPrivateState,
-		TestActionPayloadMap,
-		TestPhasePayloadMap
-	> => ({
+	): InitializationResult<TestGameDef> => ({
 		state: { board: [] },
-		playerStates: Object.fromEntries(playerIds.map((id) => [id, { hand: [] }])),
+		playerStates: Object.fromEntries(
+			playerIds.map((id) => [
+				id,
+				{ private: { hand: [] }, public: { handCount: 0 } },
+			]),
+		),
 		initialTurn: {
-			currentPlayerId: playerIds[0],
+			userId: playerIds[0],
 			allowedActions: ['move', 'pass'],
 			number: 1,
 			phase: 'play',
@@ -60,53 +42,39 @@ export const createMockEngine = (
 		},
 	}),
 
+	projectPlayer: (player) => ({
+		...player,
+		state: { handCount: player.state.hand.length },
+	}),
+
+	projectAction: (action) =>
+		action as Action<TestActionPayloadMap, TestPhasePayloadMap, 'public'>,
+	
+	projectTurn: (turn) => ({
+		...turn,
+		allowedActions: turn.allowedActions as any,
+	}),
+
 	validateAction: (
-		_state: Game<
-			TestConfig,
-			TestPublicState,
-			TestPrivateState,
-			TestActionPayloadMap,
-			TestPhasePayloadMap
-		>,
+		_state: Game<TestGameDef>,
 		_action: Action<TestActionPayloadMap, TestPhasePayloadMap>,
 	): ValidateActionResult => ({
 		isValid: true,
 	}),
 
 	applyAction: (
-		state: Game<
-			TestConfig,
-			TestPublicState,
-			TestPrivateState,
-			TestActionPayloadMap,
-			TestPhasePayloadMap
-		>,
+		state: Game<TestGameDef>,
 		_action: Action<TestActionPayloadMap, TestPhasePayloadMap>,
-	): ApplyActionResult<
-		TestConfig,
-		TestPublicState,
-		TestPrivateState,
-		TestActionPayloadMap,
-		TestPhasePayloadMap
-	> => ({
+	): ApplyActionResult<TestGameDef> => ({
 		success: true,
-		newGame: state,
+		state: state.state,
+		playerStates: Object.fromEntries(
+			state.players.map((p) => [p.userId, p.state]),
+		),
 	}),
 
-	checkGameEnd: (
-		_state: Game<
-			TestConfig,
-			TestPublicState,
-			TestPrivateState,
-			TestActionPayloadMap,
-			TestPhasePayloadMap
-		>,
-	): CheckGameEndResult => ({
+	checkGameEnd: (_state: Game<TestGameDef>): CheckGameEndResult => ({
 		isFinished: false,
-	}),
-
-	getEnemyState: (state: TestPrivateState) => ({
-		handCount: state.hand.length,
 	}),
 
 	...overrides,

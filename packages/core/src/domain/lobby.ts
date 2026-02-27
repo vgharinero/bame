@@ -16,12 +16,12 @@ export const isPublicLobby = (lobby: Lobby) => !lobby.code;
 export type LobbyStatus = 'waiting' | 'ready' | 'starting' | 'transitioned';
 
 export type Lobby<TConfig extends Payload = Payload> = VersionedEntity & {
-	readonly id: string;
-	readonly code: string | null; // 4-char join code
-	readonly hostId: string;
+	id: string;
+	code: string | null;
+	hostId: string;
 	
-	readonly minPlayers: number;
-	readonly maxPlayers: number;
+	minPlayers: number;
+	maxPlayers: number;
 	
 	status: LobbyStatus;
 	members: LobbyMember[];
