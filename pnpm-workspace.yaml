@@ -1,0 +1,9 @@
+packages:
+  - "packages/core"
+  - "packages/cli"
+  - "packages/ui/*"
+  - "packages/storage/*"
+  - "examples/*"
+allowBuilds:
+  esbuild: true
+  sharp: true

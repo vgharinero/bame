@@ -1,0 +1,45 @@
+{
+	"name": "@bame/storage-supabase",
+	"version": "0.2.0",
+	"description": "Supabase Postgres storage and Realtime pub/sub adapters for Bame",
+	"license": "MIT",
+	"author": "Víctor Granados (https://github.com/vgharinero)",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/vgharinero/bame.git",
+		"directory": "packages/storage/supabase"
+	},
+	"homepage": "https://github.com/vgharinero/bame#readme",
+	"keywords": [
+		"bame",
+		"storage",
+		"supabase",
+		"postgres",
+		"realtime"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "pnpm clean && tsc",
+		"typecheck": "tsc --noEmit",
+		"dev": "tsc --watch",
+		"clean": "node -e \"import('node:fs').then(fs => fs.rmSync('dist', { recursive: true, force: true }))\""
+	},
+	"dependencies": {
+		"@bame/core": "workspace:*"
+	}
+}

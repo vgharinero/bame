@@ -1,0 +1,44 @@
+{
+	"name": "bame",
+	"version": "1.0.0",
+	"private": true,
+	"type": "module",
+	"description": "Lightweight, type-safe turn-based game engine for singleplayer, local multiplayer, and online multiplayer games",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/vgharinero/bame.git"
+	},
+	"homepage": "https://github.com/vgharinero/bame#readme",
+	"engines": {
+		"node": ">=20"
+	},
+	"scripts": {
+		"build": "pnpm --filter \"@bame/*\" build",
+		"build:all": "pnpm -r build",
+		"clean": "pnpm --filter \"@bame/*\" clean",
+		"typecheck": "pnpm -r typecheck",
+		"test": "vitest run",
+		"test:watch": "vitest",
+		"test:ui": "vitest --ui",
+		"check": "biome check .",
+		"check:fix": "biome check --write .",
+		"format": "biome format --write .",
+		"release": "pnpm build && pnpm test && pnpm --filter \"@bame/*\" publish --access public",
+		"example:guess-number": "pnpm --filter guess-number play",
+		"example:nim": "pnpm --filter nim play",
+		"example:high-card:server": "pnpm --filter high-card server",
+		"example:high-card:play": "pnpm --filter high-card play",
+		"example:lights-out": "pnpm --filter lights-out dev",
+		"example:tic-tac-toe": "pnpm --filter tic-tac-toe dev",
+		"example:rps": "pnpm --filter rock-paper-scissors dev"
+	},
+	"license": "MIT",
+	"author": "Víctor Granados (https://github.com/vgharinero)",
+	"devDependencies": {
+		"@biomejs/biome": "2.2.0",
+		"@types/node": "^22.0.0",
+		"tsx": "^4.19.0",
+		"typescript": "^5.0.0",
+		"vitest": "^4.0.18"
+	}
+}

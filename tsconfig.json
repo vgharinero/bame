@@ -1,0 +1,14 @@
+{
+	"extends": "./tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"jsx": "react-jsx",
+		"types": ["node"],
+		"paths": {
+			"@bame/core": ["./packages/core/src/index.ts"],
+			"@bame/core/testing": ["./packages/core/src/testing.ts"]
+		}
+	},
+	"include": ["packages/**/src/**/*.ts", "packages/**/src/**/*.tsx"],
+	"exclude": ["**/node_modules", "**/dist"]
+}

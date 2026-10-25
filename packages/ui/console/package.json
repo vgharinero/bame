@@ -1,0 +1,48 @@
+{
+	"name": "@bame/ui-console",
+	"version": "0.2.0",
+	"description": "Interactive terminal UI adapter for Bame games (singleplayer, local pass-and-play, and online multiplayer)",
+	"license": "MIT",
+	"author": "Víctor Granados (https://github.com/vgharinero)",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/vgharinero/bame.git",
+		"directory": "packages/ui/console"
+	},
+	"homepage": "https://github.com/vgharinero/bame#readme",
+	"keywords": [
+		"bame",
+		"console",
+		"terminal",
+		"cli-game",
+		"turn-based"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"exports": {
+		".": {
+			"types": "./dist/index.d.ts",
+			"default": "./dist/index.js"
+		}
+	},
+	"files": [
+		"dist"
+	],
+	"scripts": {
+		"build": "pnpm clean && tsc",
+		"typecheck": "tsc --noEmit",
+		"dev": "tsc --watch",
+		"clean": "node -e \"import('node:fs').then(fs => fs.rmSync('dist', { recursive: true, force: true }))\""
+	},
+	"dependencies": {
+		"@bame/core": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0"
+	}
+}

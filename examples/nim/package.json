@@ -1,0 +1,15 @@
+{
+	"name": "nim",
+	"version": "0.2.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "tsc --noEmit",
+		"typecheck": "tsc --noEmit",
+		"play": "tsx src/play.ts"
+	},
+	"dependencies": {
+		"@bame/core": "workspace:*",
+		"@bame/ui-console": "workspace:*"
+	}
+}

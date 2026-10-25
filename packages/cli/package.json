@@ -1,0 +1,45 @@
+{
+	"name": "@bame/cli",
+	"version": "0.2.0",
+	"description": "CLI scaffolder for Bame turn-based game projects (console and React templates)",
+	"license": "MIT",
+	"author": "Víctor Granados (https://github.com/vgharinero)",
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/vgharinero/bame.git",
+		"directory": "packages/cli"
+	},
+	"homepage": "https://github.com/vgharinero/bame#readme",
+	"keywords": [
+		"bame",
+		"cli",
+		"scaffolder",
+		"game-engine",
+		"turn-based"
+	],
+	"engines": {
+		"node": ">=20"
+	},
+	"publishConfig": {
+		"access": "public"
+	},
+	"type": "module",
+	"bin": {
+		"bame": "./dist/index.js"
+	},
+	"files": [
+		"dist",
+		"AGENTS.md"
+	],
+	"scripts": {
+		"build": "pnpm clean && tsc",
+		"typecheck": "tsc --noEmit",
+		"clean": "node -e \"import('node:fs').then(fs => fs.rmSync('dist', { recursive: true, force: true }))\""
+	},
+	"dependencies": {
+		"commander": "^12.0.0"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0"
+	}
+}

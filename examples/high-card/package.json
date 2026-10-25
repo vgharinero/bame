@@ -1,0 +1,21 @@
+{
+	"name": "high-card",
+	"version": "0.2.0",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"build": "tsc --noEmit",
+		"typecheck": "tsc --noEmit",
+		"server": "tsx src/server.ts",
+		"play": "tsx src/play.ts",
+		"play:local": "tsx src/play.ts --local"
+	},
+	"dependencies": {
+		"@bame/core": "workspace:*",
+		"@bame/storage-local": "workspace:*",
+		"@bame/ui-console": "workspace:*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0"
+	}
+}
