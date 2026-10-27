@@ -97,6 +97,21 @@ export const guessNumber = defineGame({
   - Pass `hooks: { onMove, onNotify }` to `createBame({ ... })` on your server to trigger emails, web push notifications, or webhooks when a player's turn begins or a market offer is proposed.
 - **`invalid(reason)` (`ctx.invalid(reason)` or `return invalid(reason)`)**: Reject an illegal move with a human-readable error message without mutating state or advancing the turn.
 
+### Structured errors
+
+Rules and validators can return language-independent error codes and JSON parameters:
+
+```ts
+return invalid({ code: 'NOT_ENOUGH_RESOURCES', params: { required: 3 } });
+```
+
+Failed move results carry `{ ok: false, error, code, params }`. `validateArgs` and
+`validateConfig` accept the same structured input. Lobby/service exceptions use
+`BameError`; HTTP clients preserve metadata on `BameTransportError`.
+`getErrorDetails(error)` reads `{ code, params }` from either exceptions or results.
+Render the code in the UI using your own copy; an optional `message` supplies a
+fallback. Existing string errors and the `error` string field remain supported.
+
 ---
 
 ## 2. Test Your Game Headlessly (`@bame/core/testing`)

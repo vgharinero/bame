@@ -72,7 +72,11 @@ describe('createBame services (lobbies & matches)', () => {
 			move: 'takeCoin',
 			args: [],
 		});
-		expect(wrongTurn).toEqual({ ok: false, error: 'Not your turn' });
+		expect(wrongTurn).toEqual({
+			ok: false,
+			error: 'Not your turn',
+			code: 'NOT_YOUR_TURN',
+		});
 
 		// Bob takes 1 coin
 		await bame.matches.move({
@@ -571,6 +575,7 @@ describe('createBame services (lobbies & matches)', () => {
 		expect(bobUndo).toEqual({
 			ok: false,
 			error: 'Only the last mover may undo',
+			code: 'UNDO_FORBIDDEN',
 		});
 
 		// 6. Bob finishes the game; finished matches cannot be undone
@@ -591,6 +596,7 @@ describe('createBame services (lobbies & matches)', () => {
 		expect(undoAfterFinish).toEqual({
 			ok: false,
 			error: 'Finished matches are final',
+			code: 'MATCH_FINISHED',
 		});
 	});
 });

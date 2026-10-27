@@ -101,6 +101,7 @@ const {
 	isWaitingForMe, // boolean (true when it's your turn OR `turn.waitingFor` includes you during an interrupt!)
 	loading,        // boolean
 	acting,         // boolean (true while a move/undo/forfeit RPC is in flight)
+	errorDetails,   // { code: string; params?: Record<string, unknown> } | null
 	error,          // Last invalid() move message or network error
 	moves,          // Typed proxy: e.g. await moves.place(0) or await moves.choose('rock')
 	canMove,        // Dry-run check: e.g. canMove('place', 0) -> boolean
@@ -122,6 +123,7 @@ const {
 	canStart,       // boolean
 	loading,        // boolean
 	acting,         // boolean
+	errorDetails,   // Structured code and parameters, or null for string-only errors
 	error,          // string | null
 	create,         // ({ game, config, isPrivate }) => Promise<Lobby>
 	join,           // (targetLobbyId?) => Promise<Lobby | null>
@@ -241,3 +243,7 @@ Renders the winner or draw banner and a rematch/leave button when `status === 'f
 ## License
 
 [MIT](../../LICENSE)
+
+`useLocalMatch`, `useMatchesList`, `useProfile`, and `useLeaderboard` also expose
+`errorDetails`. Translate those codes at the UI boundary; existing `error` strings
+remain available.

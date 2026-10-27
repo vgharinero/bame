@@ -1,3 +1,4 @@
+import { BameError } from '../engine/errors.js';
 import {
 	createMatch,
 	type Game,
@@ -122,7 +123,10 @@ export const createLobbiesService = (
 				return code;
 			}
 		}
-		throw new Error('Failed to generate a unique lobby join code');
+		throw new BameError({
+			code: 'JOIN_CODE_UNAVAILABLE',
+			message: 'Failed to generate a unique lobby join code',
+		});
 	};
 
 	return {
@@ -133,7 +137,10 @@ export const createLobbiesService = (
 			const isPublic = !input.isPrivate;
 			assertJson(input.config, 'config');
 			const configError = game.validateConfig?.(input.config);
-			if (configError) throw new Error(configError);
+			if (configError)
+				throw typeof configError === 'string'
+					? new Error(configError)
+					: new BameError(configError);
 			const code = input.isPrivate ? await generateUniqueCode() : null;
 			const now = Date.now();
 			const ready = input.readyByDefault ?? true;
@@ -175,9 +182,10 @@ export const createLobbiesService = (
 			if (!lobby.isPublic) {
 				const isMember = lobby.members.some((m) => m.userId === userId);
 				if (!isMember) {
-					throw new Error(
-						'You do not have permission to view this private lobby',
-					);
+					throw new BameError({
+						code: 'FORBIDDEN',
+						message: 'You do not have permission to view this private lobby',
+					});
 				}
 			}
 
@@ -197,21 +205,28 @@ export const createLobbiesService = (
 			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
 				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
 				if (!lobby) {
-					throw new Error('Lobby not found');
+					throw new BameError({
+						code: 'LOBBY_NOT_FOUND',
+						message: 'Lobby not found',
+					});
 				}
 				if (!lobby.isPublic) {
-					throw new Error(
-						'Private lobbies can only be joined with a join code',
-					);
+					throw new BameError({
+						code: 'JOIN_CODE_REQUIRED',
+						message: 'Private lobbies can only be joined with a join code',
+					});
 				}
 				if (lobby.status !== 'open') {
-					throw new Error('Lobby is no longer open');
+					throw new BameError({
+						code: 'LOBBY_CLOSED',
+						message: 'Lobby is no longer open',
+					});
 				}
 				if (lobby.members.some((m) => m.userId === input.userId)) {
 					return lobby;
 				}
 				if (lobby.members.length >= lobby.maxPlayers) {
-					throw new Error('Lobby is full');
+					throw new BameError({ code: 'LOBBY_FULL', message: 'Lobby is full' });
 				}
 
 				const now = Date.now();
@@ -243,7 +258,10 @@ export const createLobbiesService = (
 					throw err;
 				}
 			}
-			throw new Error('Failed to join lobby due to concurrent updates');
+			throw new BameError({
+				code: 'CONFLICT',
+				message: 'Failed to join lobby due to concurrent updates',
+			});
 		},
 
 		async joinByCode(input: JoinLobbyByCodeInput): Promise<Lobby> {
@@ -253,19 +271,28 @@ export const createLobbiesService = (
 					code: normalizedCode,
 				});
 				if (matches.length > 1)
-					throw new Error('Ambiguous join code; recreate the lobby');
+					throw new BameError({
+						code: 'AMBIGUOUS_JOIN_CODE',
+						message: 'Ambiguous join code; recreate the lobby',
+					});
 				const lobby = matches[0];
 				if (!lobby) {
-					throw new Error('Lobby not found for code');
+					throw new BameError({
+						code: 'LOBBY_NOT_FOUND',
+						message: 'Lobby not found for code',
+					});
 				}
 				if (lobby.status !== 'open') {
-					throw new Error('Lobby is no longer open');
+					throw new BameError({
+						code: 'LOBBY_CLOSED',
+						message: 'Lobby is no longer open',
+					});
 				}
 				if (lobby.members.some((m) => m.userId === input.userId)) {
 					return lobby;
 				}
 				if (lobby.members.length >= lobby.maxPlayers) {
-					throw new Error('Lobby is full');
+					throw new BameError({ code: 'LOBBY_FULL', message: 'Lobby is full' });
 				}
 
 				const now = Date.now();
@@ -297,23 +324,35 @@ export const createLobbiesService = (
 					throw err;
 				}
 			}
-			throw new Error('Failed to join lobby due to concurrent updates');
+			throw new BameError({
+				code: 'CONFLICT',
+				message: 'Failed to join lobby due to concurrent updates',
+			});
 		},
 
 		async setReady(input: SetReadyInput): Promise<Lobby> {
 			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
 				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
 				if (!lobby) {
-					throw new Error('Lobby not found');
+					throw new BameError({
+						code: 'LOBBY_NOT_FOUND',
+						message: 'Lobby not found',
+					});
 				}
 				if (lobby.status !== 'open') {
-					throw new Error('Cannot change ready state after lobby has started');
+					throw new BameError({
+						code: 'LOBBY_STARTED',
+						message: 'Cannot change ready state after lobby has started',
+					});
 				}
 				const memberIndex = lobby.members.findIndex(
 					(m) => m.userId === input.userId,
 				);
 				if (memberIndex === -1) {
-					throw new Error('You are not a member of this lobby');
+					throw new BameError({
+						code: 'NOT_A_MEMBER',
+						message: 'You are not a member of this lobby',
+					});
 				}
 
 				const updatedMembers = lobby.members.map((m, idx) =>
@@ -341,7 +380,10 @@ export const createLobbiesService = (
 					throw err;
 				}
 			}
-			throw new Error('Failed to update ready state due to concurrent updates');
+			throw new BameError({
+				code: 'CONFLICT',
+				message: 'Failed to update ready state due to concurrent updates',
+			});
 		},
 
 		async leave(input: LeaveLobbyInput): Promise<Lobby | null> {
@@ -404,18 +446,27 @@ export const createLobbiesService = (
 					throw err;
 				}
 			}
-			throw new Error('Failed to leave lobby due to concurrent updates');
+			throw new BameError({
+				code: 'CONFLICT',
+				message: 'Failed to leave lobby due to concurrent updates',
+			});
 		},
 
 		async start(input: StartLobbyInput): Promise<Match> {
 			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
 				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
 				if (!lobby) {
-					throw new Error('Lobby not found');
+					throw new BameError({
+						code: 'LOBBY_NOT_FOUND',
+						message: 'Lobby not found',
+					});
 				}
 
 				if (lobby.hostId !== input.userId)
-					throw new Error('Only the lobby host can start the match');
+					throw new BameError({
+						code: 'LOBBY_HOST_REQUIRED',
+						message: 'Only the lobby host can start the match',
+					});
 				// Idempotent: if already started and match exists, return existing match
 				if (lobby.status === 'started' && lobby.matchId) {
 					const existingMatch = await storage.get<Match>(
@@ -428,20 +479,30 @@ export const createLobbiesService = (
 				}
 
 				if (lobby.hostId !== input.userId) {
-					throw new Error('Only the lobby host can start the match');
+					throw new BameError({
+						code: 'LOBBY_HOST_REQUIRED',
+						message: 'Only the lobby host can start the match',
+					});
 				}
 				if (lobby.members.length < lobby.minPlayers) {
-					throw new Error(
-						`Need at least ${lobby.minPlayers} players to start (currently ${lobby.members.length})`,
-					);
+					throw new BameError({
+						code: 'NOT_ENOUGH_PLAYERS',
+						message: `Need at least ${lobby.minPlayers} players to start (currently ${lobby.members.length})`,
+						params: { min: lobby.minPlayers, current: lobby.members.length },
+					});
 				}
 				if (lobby.members.length > lobby.maxPlayers) {
-					throw new Error(
-						`Lobby exceeds maximum players (${lobby.maxPlayers})`,
-					);
+					throw new BameError({
+						code: 'TOO_MANY_PLAYERS',
+						message: `Lobby exceeds maximum players (${lobby.maxPlayers})`,
+						params: { max: lobby.maxPlayers, current: lobby.members.length },
+					});
 				}
 				if (!lobby.members.every((m) => m.ready)) {
-					throw new Error('Not all players are ready');
+					throw new BameError({
+						code: 'PLAYERS_NOT_READY',
+						message: 'Not all players are ready',
+					});
 				}
 
 				const game = requireGame(lobby.game);
@@ -495,7 +556,10 @@ export const createLobbiesService = (
 
 				return match;
 			}
-			throw new Error('Concurrent lobby start');
+			throw new BameError({
+				code: 'CONFLICT',
+				message: 'Concurrent lobby start',
+			});
 		},
 
 		subscribe(

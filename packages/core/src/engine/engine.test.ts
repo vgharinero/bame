@@ -132,7 +132,11 @@ describe('defineGame & runner', () => {
 			const snapshotBefore = structuredClone(match);
 
 			const wrongTurn = applyMove(counterGame, match, 'bob', 'add', [2]);
-			expect(wrongTurn).toEqual({ ok: false, error: 'Not your turn' });
+			expect(wrongTurn).toEqual({
+				ok: false,
+				error: 'Not your turn',
+				code: 'NOT_YOUR_TURN',
+			});
 			expect(match).toEqual(snapshotBefore);
 
 			const invalidRule = applyMove(counterGame, match, 'alice', 'add', [99]);
@@ -195,6 +199,7 @@ describe('defineGame & runner', () => {
 			expect(afterEnd).toEqual({
 				ok: false,
 				error: 'Match is already finished',
+				code: 'MATCH_FINISHED',
 			});
 		});
 
@@ -298,6 +303,7 @@ describe('defineGame & runner', () => {
 			expect(m.move('charlie', 'endPlayerTurn')).toEqual({
 				ok: false,
 				error: 'Not your turn',
+				code: 'NOT_YOUR_TURN',
 			});
 
 			// Alice proposes a trade on her turn -> emits notification to Bob & Charlie and keeps turn

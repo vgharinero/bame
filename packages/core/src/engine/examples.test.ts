@@ -39,6 +39,7 @@ describe('playable example game definitions', () => {
 		expect(m.move('alice', 'take', 1)).toEqual({
 			ok: false,
 			error: 'Not your turn',
+			code: 'NOT_YOUR_TURN',
 		});
 
 		expect(m.move('bob', 'take', 2)).toEqual({

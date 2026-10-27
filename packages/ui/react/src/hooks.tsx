@@ -2,8 +2,11 @@ import {
 	type BameRuntime,
 	type CreateLobbyInput,
 	canMove as checkCanMove,
+	type ErrorDetails,
+	type ErrorResult,
 	type Game,
 	type GameNotification,
+	getErrorDetails,
 	type ListMatchesFilter,
 	type Lobby,
 	MatchFeed,
@@ -28,6 +31,24 @@ import {
 	useRef,
 	useState,
 } from 'react';
+
+/** Keep the legacy message and structured details in one state update. */
+function useErrorState() {
+	const [failure, setFailure] = useState<{
+		message: string;
+		details: ErrorDetails | null;
+	} | null>(null);
+	const setError = useCallback((message: string | null, source?: unknown) => {
+		setFailure(
+			message === null ? null : { message, details: getErrorDetails(source) },
+		);
+	}, []);
+	return [
+		failure?.message ?? null,
+		setError,
+		failure?.details ?? null,
+	] as const;
+}
 
 export interface BameContextValue {
 	bame: BameRuntime;
@@ -182,7 +203,7 @@ export const useLobby = <TConfig = unknown>(
 			: null;
 	const [loading, setLoading] = useState<boolean>(Boolean(lobbyId));
 	const [acting, setActing] = useState<boolean>(false);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError, errorDetails] = useErrorState();
 	const versionRef = useRef<number>(0);
 
 	useEffect(() => {
@@ -229,7 +250,10 @@ export const useLobby = <TConfig = unknown>(
 			})
 			.catch((err: unknown) => {
 				if (!cancelled) {
-					setError(err instanceof Error ? err.message : 'Failed to load lobby');
+					setError(
+						err instanceof Error ? err.message : 'Failed to load lobby',
+						err,
+					);
 					setLoading(false);
 				}
 			});
@@ -244,7 +268,7 @@ export const useLobby = <TConfig = unknown>(
 			cancelled = true;
 			unsub();
 		};
-	}, [bame, lobbyId, userId, applyLobbySnapshot, setLobby]);
+	}, [bame, lobbyId, userId, applyLobbySnapshot, setLobby, setError]);
 
 	const create = useCallback(
 		async (input: CreateLobbyHookInput<TConfig>) => {
@@ -267,13 +291,13 @@ export const useLobby = <TConfig = unknown>(
 			} catch (err) {
 				const msg =
 					err instanceof Error ? err.message : 'Failed to create lobby';
-				setError(msg);
+				setError(msg, err);
 				throw err;
 			} finally {
 				setActing(false);
 			}
 		},
-		[bame, userId, setLobby],
+		[bame, userId, setLobby, setError],
 	);
 
 	const join = useCallback(
@@ -292,13 +316,13 @@ export const useLobby = <TConfig = unknown>(
 				return updated;
 			} catch (err) {
 				const msg = err instanceof Error ? err.message : 'Failed to join lobby';
-				setError(msg);
+				setError(msg, err);
 				throw err;
 			} finally {
 				setActing(false);
 			}
 		},
-		[bame, lobbyId, userId, applyLobbySnapshot],
+		[bame, lobbyId, userId, applyLobbySnapshot, setError],
 	);
 
 	const joinByCode = useCallback(
@@ -317,13 +341,13 @@ export const useLobby = <TConfig = unknown>(
 			} catch (err) {
 				const msg =
 					err instanceof Error ? err.message : 'Failed to join lobby by code';
-				setError(msg);
+				setError(msg, err);
 				throw err;
 			} finally {
 				setActing(false);
 			}
 		},
-		[bame, userId, setLobby],
+		[bame, userId, setLobby, setError],
 	);
 
 	const setReady = useCallback(
@@ -342,13 +366,13 @@ export const useLobby = <TConfig = unknown>(
 			} catch (err) {
 				const msg =
 					err instanceof Error ? err.message : 'Failed to update ready state';
-				setError(msg);
+				setError(msg, err);
 				throw err;
 			} finally {
 				setActing(false);
 			}
 		},
-		[bame, lobbyId, userId, applyLobbySnapshot],
+		[bame, lobbyId, userId, applyLobbySnapshot, setError],
 	);
 
 	const leave = useCallback(async () => {
@@ -365,12 +389,12 @@ export const useLobby = <TConfig = unknown>(
 			return updated;
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : 'Failed to leave lobby';
-			setError(msg);
+			setError(msg, err);
 			throw err;
 		} finally {
 			setActing(false);
 		}
-	}, [bame, lobbyId, userId, applyLobbySnapshot]);
+	}, [bame, lobbyId, userId, applyLobbySnapshot, setError]);
 
 	const start = useCallback(async () => {
 		if (!lobbyId) return null;
@@ -380,19 +404,19 @@ export const useLobby = <TConfig = unknown>(
 			return await bame.lobbies.start({ userId, lobbyId });
 		} catch (err) {
 			const msg = err instanceof Error ? err.message : 'Failed to start match';
-			setError(msg);
+			setError(msg, err);
 			throw err;
 		} finally {
 			setActing(false);
 		}
-	}, [bame, lobbyId, userId]);
+	}, [bame, lobbyId, userId, setError]);
 
 	const reset = useCallback(() => {
 		versionRef.current = 0;
 		setInternalLobbyId(null);
 		setLobby(null);
 		setError(null);
-	}, [setLobby]);
+	}, [setLobby, setError]);
 
 	const isHost = Boolean(lobby && lobby.hostId === userId);
 	const currentMember = lobby?.members.find((m) => m.userId === userId);
@@ -416,6 +440,7 @@ export const useLobby = <TConfig = unknown>(
 		loading,
 		acting,
 		error,
+		errorDetails,
 		create,
 		join,
 		joinByCode,
@@ -433,9 +458,7 @@ export type BoundMoves<
 > = {
 	[K in keyof TMoves & string]: (
 		...args: MoveArgs<TMoves[K]>
-	) => Promise<
-		{ ok: true; view: MatchView<TView> } | { ok: false; error: string }
-	>;
+	) => Promise<{ ok: true; view: MatchView<TView> } | ErrorResult>;
 };
 
 export interface UseMatchOptions {
@@ -480,7 +503,7 @@ export const useMatch = <
 	const view = snapshot.scope === scope ? snapshot.view : null;
 	const [loading, setLoading] = useState(Boolean(matchId));
 	const [acting, setActing] = useState(false);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError, errorDetails] = useErrorState();
 	const [connection, setConnection] = useState<ConnectionState>(
 		matchId ? 'connecting' : 'disconnected',
 	);
@@ -516,7 +539,7 @@ export const useMatch = <
 		feedRef.current = feed;
 		const failed = (err: unknown) => {
 			if (active()) {
-				setError(err instanceof Error ? err.message : 'Connection failed');
+				setError(err instanceof Error ? err.message : 'Connection failed', err);
 				setLoading(false);
 				const code = (err as { code?: string })?.code;
 				setConnection(
@@ -557,7 +580,7 @@ export const useMatch = <
 			if (feedRef.current === feed) feedRef.current = null;
 			unsub();
 		};
-	}, [bame, matchId, userId, scope]);
+	}, [bame, matchId, userId, scope, setError]);
 	const perform = useCallback(
 		async (
 			kind: 'move' | 'undo' | 'forfeit',
@@ -596,20 +619,20 @@ export const useMatch = <
 						if (options.autoSwitchSeat && result.view.status === 'active')
 							setUserId(result.view.turn.currentPlayerId);
 					} else {
-						setError(result.error);
+						setError(result.error, result);
 						if (result.code === 'CONFLICT') void feed.refetch().catch(() => {});
 					}
 				}
 				return result;
 			} catch (err) {
 				if (active())
-					setError(err instanceof Error ? err.message : 'Action failed');
+					setError(err instanceof Error ? err.message : 'Action failed', err);
 				throw err;
 			} finally {
 				if (active()) setActing(false);
 			}
 		},
-		[bame, matchId, userId, scope, options.autoSwitchSeat, setUserId],
+		[bame, matchId, userId, scope, options.autoSwitchSeat, setUserId, setError],
 	);
 	const moves = useMemo(
 		() =>
@@ -680,6 +703,7 @@ export const useMatch = <
 		loading: snapshot.scope === scope ? loading : Boolean(matchId),
 		acting: snapshot.scope === scope && acting,
 		error: snapshot.scope === scope ? error : null,
+		errorDetails: snapshot.scope === scope ? errorDetails : null,
 		connection:
 			snapshot.scope === scope
 				? connection
@@ -728,7 +752,7 @@ export const useLocalMatch = <
 	const { bame, userId, setUserId } = useBame();
 	const [matchId, setMatchId] = useState<string | null>(null);
 	const [starting, setStarting] = useState<boolean>(options.autoStart ?? true);
-	const [setupError, setSetupError] = useState<string | null>(null);
+	const [setupError, setSetupError, setupErrorDetails] = useErrorState();
 
 	const playersKey = options.players ? options.players.join('\0') : '';
 	const hasMultiplePlayers = (options.players?.length ?? 1) > 1;
@@ -771,7 +795,7 @@ export const useLocalMatch = <
 			} catch (err) {
 				const msg =
 					err instanceof Error ? err.message : 'Failed to start local match';
-				setSetupError(msg);
+				setSetupError(msg, err);
 				return null;
 			} finally {
 				setStarting(false);
@@ -790,6 +814,7 @@ export const useLocalMatch = <
 		userId,
 		autoSwitchSeat,
 		setUserId,
+		setSetupError,
 	]);
 
 	// biome-ignore lint/correctness/useExhaustiveDependencies: run once when autoStart is enabled
@@ -807,6 +832,7 @@ export const useLocalMatch = <
 		starting,
 		loading: starting || match.loading,
 		error: setupError ?? match.error,
+		errorDetails: setupError ? setupErrorDetails : match.errorDetails,
 		startMatch,
 		restart: startMatch,
 	};
@@ -819,7 +845,7 @@ export const useMatchesList = <TView = unknown>(
 	const targetUserId = filter.userId ?? contextUserId;
 	const [matches, setMatches] = useState<MatchView<TView>[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError, errorDetails] = useErrorState();
 
 	const refresh = useCallback(async () => {
 		setLoading(true);
@@ -836,12 +862,19 @@ export const useMatchesList = <TView = unknown>(
 		} catch (err) {
 			const msg =
 				err instanceof Error ? err.message : 'Failed to load matches list';
-			setError(msg);
+			setError(msg, err);
 			return [];
 		} finally {
 			setLoading(false);
 		}
-	}, [bame, targetUserId, filter.waitingForUserId, filter.status, filter.game]);
+	}, [
+		bame,
+		targetUserId,
+		filter.waitingForUserId,
+		filter.status,
+		filter.game,
+		setError,
+	]);
 
 	useEffect(() => {
 		void refresh();
@@ -851,6 +884,7 @@ export const useMatchesList = <TView = unknown>(
 		matches,
 		loading,
 		error,
+		errorDetails,
 		refresh,
 	};
 };
@@ -961,7 +995,7 @@ export const useProfile = (targetUserId?: string) => {
 	const userId = targetUserId ?? contextUserId;
 	const [profile, setProfile] = useState<Profile | null>(null);
 	const [loading, setLoading] = useState<boolean>(Boolean(userId));
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError, errorDetails] = useErrorState();
 
 	useEffect(() => {
 		if (!userId) {
@@ -986,6 +1020,7 @@ export const useProfile = (targetUserId?: string) => {
 				if (!cancelled) {
 					setError(
 						err instanceof Error ? err.message : 'Failed to load profile',
+						err,
 					);
 					setLoading(false);
 				}
@@ -1001,7 +1036,7 @@ export const useProfile = (targetUserId?: string) => {
 			cancelled = true;
 			unsub();
 		};
-	}, [bame, userId]);
+	}, [bame, userId, setError]);
 
 	const updateProfile = useCallback(
 		async (updates: UpdateProfileInput) => {
@@ -1014,11 +1049,11 @@ export const useProfile = (targetUserId?: string) => {
 			} catch (err) {
 				const msg =
 					err instanceof Error ? err.message : 'Failed to update profile';
-				setError(msg);
+				setError(msg, err);
 				throw err;
 			}
 		},
-		[bame, userId],
+		[bame, userId, setError],
 	);
 
 	return {
@@ -1027,6 +1062,7 @@ export const useProfile = (targetUserId?: string) => {
 		statsByGame: profile?.statsByGame ?? null,
 		loading,
 		error,
+		errorDetails,
 		updateProfile,
 	};
 };
@@ -1035,7 +1071,7 @@ export const useLeaderboard = () => {
 	const { bame } = useBame();
 	const [profiles, setProfiles] = useState<Profile[]>([]);
 	const [loading, setLoading] = useState<boolean>(true);
-	const [error, setError] = useState<string | null>(null);
+	const [error, setError, errorDetails] = useErrorState();
 
 	const refresh = useCallback(async () => {
 		setLoading(true);
@@ -1047,12 +1083,12 @@ export const useLeaderboard = () => {
 		} catch (err) {
 			const msg =
 				err instanceof Error ? err.message : 'Failed to load leaderboard';
-			setError(msg);
+			setError(msg, err);
 			return [];
 		} finally {
 			setLoading(false);
 		}
-	}, [bame]);
+	}, [bame, setError]);
 
 	useEffect(() => {
 		void refresh();
@@ -1062,6 +1098,7 @@ export const useLeaderboard = () => {
 		profiles,
 		loading,
 		error,
+		errorDetails,
 		refresh,
 	};
 };

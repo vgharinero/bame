@@ -1,3 +1,4 @@
+import { BameError } from '../engine/errors.js';
 import type {
 	GameNotification,
 	Match,
@@ -464,7 +465,7 @@ export const createBameHandler = (
 					{ status: 405, headers: { Allow: 'GET, POST, OPTIONS' } },
 				);
 		} catch (error) {
-			if (!(error instanceof HttpError))
+			if (!(error instanceof HttpError) && !(error instanceof BameError))
 				await bestEffort(
 					() => {
 						throw error;
@@ -475,10 +476,26 @@ export const createBameHandler = (
 			response = Response.json(
 				{
 					ok: false,
-					error: error instanceof HttpError ? error.message : 'Server error',
-					code: error instanceof HttpError ? error.code : 'INTERNAL_ERROR',
+					error:
+						error instanceof HttpError || error instanceof BameError
+							? error.message
+							: 'Server error',
+					code:
+						error instanceof HttpError || error instanceof BameError
+							? error.code
+							: 'INTERNAL_ERROR',
+					...(error instanceof BameError && error.params !== undefined
+						? { params: error.params }
+						: {}),
 				},
-				{ status: error instanceof HttpError ? error.status : 500 },
+				{
+					status:
+						error instanceof HttpError
+							? error.status
+							: error instanceof BameError
+								? 400
+								: 500,
+				},
 			);
 		}
 		if (origin) {
@@ -504,6 +521,7 @@ export class BameTransportError extends Error {
 		message: string,
 		public requestId?: string,
 		public code?: string,
+		public params?: Record<string, unknown>,
 	) {
 		super(message);
 	}
@@ -615,7 +633,13 @@ export const createBameClient = (
 					'TRANSPORT_ERROR',
 				);
 			}
-			let json: { ok: boolean; data: TResult; error?: string; code?: string };
+			let json: {
+				ok: boolean;
+				data: TResult;
+				error?: string;
+				code?: string;
+				params?: Record<string, unknown>;
+			};
 			try {
 				json = (await res.json()) as typeof json;
 			} catch {
@@ -634,6 +658,7 @@ export const createBameClient = (
 					json.error ?? 'Request failed',
 					requestId,
 					json.code,
+					json.params,
 				);
 			return json.data;
 		}

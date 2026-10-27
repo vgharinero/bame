@@ -1,4 +1,5 @@
 import { assertJson, jsonClone } from '../store/json.js';
+import { BameError, type ErrorResult, errorResult } from './errors.js';
 import {
 	endTurn as createEndTurnDirective,
 	invalid as createInvalidMove,
@@ -33,7 +34,7 @@ export type ApplyMoveOutcome<TState = unknown, TConfig = unknown> =
 			match: Match<TState, TConfig>;
 			notifications: GameNotification[];
 	  }
-	| { ok: false; error: string };
+	| ErrorResult;
 
 const generateId = (): string => globalThis.crypto.randomUUID();
 
@@ -75,7 +76,10 @@ export const createMatch = <
 
 	assertJson(config, 'config');
 	const configError = game.validateConfig?.(config);
-	if (configError) throw new Error(configError);
+	if (configError)
+		throw typeof configError === 'string'
+			? new Error(configError)
+			: new BameError(configError);
 	const provider = game.randomProvider ?? defaultRandomProvider;
 	const random = provider.create(seed);
 	const initialState = jsonClone(
@@ -127,24 +131,40 @@ export const applyMove = <
 	now: number = Date.now(),
 ): ApplyMoveOutcome<TState, TConfig> => {
 	if (match.status !== 'active') {
-		return { ok: false, error: 'Match is already finished' };
+		return {
+			ok: false,
+			error: 'Match is already finished',
+			code: 'MATCH_FINISHED',
+		};
 	}
 
 	const player = match.players.find((p) => p.id === userId);
 	if (!player) {
-		return { ok: false, error: 'You are not a player in this match' };
+		return {
+			ok: false,
+			error: 'You are not a player in this match',
+			code: 'NOT_A_PLAYER',
+		};
 	}
 
 	if (
 		match.rulesVersion !== (game.rulesVersion ?? '1') ||
 		match.randomProviderId !== (game.randomProvider ?? defaultRandomProvider).id
 	)
-		return { ok: false, error: 'Incompatible game rules or random provider' };
+		return {
+			ok: false,
+			error: 'Incompatible game rules or random provider',
+			code: 'INCOMPATIBLE_RULES',
+		};
 	const handler = Object.hasOwn(game.moves, moveName)
 		? game.moves[moveName]
 		: undefined;
 	if (typeof handler !== 'function') {
-		return { ok: false, error: `Unknown move "${moveName}"` };
+		return {
+			ok: false,
+			error: `Unknown move "${moveName}"`,
+			code: 'UNKNOWN_MOVE',
+		};
 	}
 
 	const isOutOfTurn = match.turn.currentPlayerId !== userId;
@@ -154,17 +174,21 @@ export const applyMove = <
 		const isAllowed =
 			allow === true || (Array.isArray(allow) && allow.includes(moveName));
 		if (!isAllowed) {
-			return { ok: false, error: 'Not your turn' };
+			return { ok: false, error: 'Not your turn', code: 'NOT_YOUR_TURN' };
 		}
 	}
 
 	try {
 		assertJson(args, 'args');
 	} catch {
-		return { ok: false, error: 'Move arguments must be JSON-compatible' };
+		return {
+			ok: false,
+			error: 'Move arguments must be JSON-compatible',
+			code: 'INVALID_ARGUMENTS',
+		};
 	}
 	const argsError = game.validateArgs?.(moveName, args);
-	if (argsError) return { ok: false, error: argsError };
+	if (argsError) return errorResult(argsError);
 
 	const workingState = structuredClone(match.state);
 	const clonedArgs = structuredClone(args);
@@ -260,7 +284,12 @@ export const applyMove = <
 	const returned = handler(ctx, ...clonedArgs);
 
 	if (isInvalidMove(returned)) {
-		return { ok: false, error: returned.reason };
+		return {
+			ok: false,
+			error: returned.reason,
+			...(returned.code === undefined ? {} : { code: returned.code }),
+			...(returned.params === undefined ? {} : { params: returned.params }),
+		};
 	}
 
 	if (isTurnDirective(returned)) {
@@ -283,6 +312,8 @@ export const applyMove = <
 			return {
 				ok: false,
 				error: `Unknown next player "${explicitNextPlayerId}"`,
+				code: 'UNKNOWN_PLAYER',
+				params: { playerId: explicitNextPlayerId },
 			};
 		}
 	}
@@ -421,10 +452,10 @@ export const validateMove = <
 	userId: string,
 	moveName: K,
 	args: MoveArgs<TMoves[K]>,
-): { ok: true } | { ok: false; error: string } => {
+): { ok: true } | ErrorResult => {
 	if ('rngState' in matchOrView) {
 		const outcome = applyMove(game, matchOrView, userId, moveName, args);
-		return outcome.ok ? { ok: true } : { ok: false, error: outcome.error };
+		return outcome.ok ? { ok: true } : outcome;
 	}
 
 	if (game.checkMove) {
@@ -434,7 +465,7 @@ export const validateMove = <
 			args,
 		);
 		return res === 'denied'
-			? { ok: false, error: 'Move denied by checkMove' }
+			? { ok: false, error: 'Move denied by checkMove', code: 'MOVE_DENIED' }
 			: { ok: true };
 	}
 
@@ -457,7 +488,7 @@ export const validateMove = <
 		history: [],
 	};
 	const outcome = applyMove(game, syntheticMatch, userId, moveName, args);
-	return outcome.ok ? { ok: true } : { ok: false, error: outcome.error };
+	return outcome.ok ? { ok: true } : outcome;
 };
 
 /**
@@ -547,19 +578,35 @@ export const undoMove = <
 	now: number = Date.now(),
 ): ApplyMoveOutcome<TState, TConfig> => {
 	if (match.status !== 'active')
-		return { ok: false, error: 'Finished matches are final' };
+		return {
+			ok: false,
+			error: 'Finished matches are final',
+			code: 'MATCH_FINISHED',
+		};
 	if (!game.turn?.allowUndo) {
-		return { ok: false, error: 'Undo is not enabled for this game' };
+		return {
+			ok: false,
+			error: 'Undo is not enabled for this game',
+			code: 'UNDO_DISABLED',
+		};
 	}
 	if (!match.players.some((p) => p.id === userId)) {
-		return { ok: false, error: 'You are not a player in this match' };
+		return {
+			ok: false,
+			error: 'You are not a player in this match',
+			code: 'NOT_A_PLAYER',
+		};
 	}
 	if (match.history.length === 0) {
-		return { ok: false, error: 'No moves to undo' };
+		return { ok: false, error: 'No moves to undo', code: 'NOTHING_TO_UNDO' };
 	}
 
 	if (match.history.at(-1)?.playerId !== userId)
-		return { ok: false, error: 'Only the last mover may undo' };
+		return {
+			ok: false,
+			error: 'Only the last mover may undo',
+			code: 'UNDO_FORBIDDEN',
+		};
 	const replayed = replayMatch(game, match, match.history.length - 1);
 	const nextMatch: Match<TState, TConfig> = {
 		...replayed,
@@ -591,10 +638,18 @@ export const forfeitMatch = <
 	now: number = Date.now(),
 ): ApplyMoveOutcome<TState, TConfig> => {
 	if (match.status !== 'active') {
-		return { ok: false, error: 'Match is already finished' };
+		return {
+			ok: false,
+			error: 'Match is already finished',
+			code: 'MATCH_FINISHED',
+		};
 	}
 	if (!match.players.some((p) => p.id === userId)) {
-		return { ok: false, error: 'You are not a player in this match' };
+		return {
+			ok: false,
+			error: 'You are not a player in this match',
+			code: 'NOT_A_PLAYER',
+		};
 	}
 
 	const remainingOpponents = match.players.filter((p) => p.id !== userId);

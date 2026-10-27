@@ -1,3 +1,4 @@
+import type { ErrorInput } from './errors.js';
 import type { RandomProvider } from './random.js';
 import type {
 	EndIfContext,
@@ -44,11 +45,11 @@ export const defineGame = <
 	name: string;
 	rulesVersion?: string;
 	randomProvider?: RandomProvider;
-	validateConfig?: (config: NoInfer<TConfig>) => string | undefined;
+	validateConfig?: (config: NoInfer<TConfig>) => ErrorInput | undefined;
 	validateArgs?: (
 		move: keyof TMoves & string,
 		args: readonly unknown[],
-	) => string | undefined;
+	) => ErrorInput | undefined;
 	checkMove?: (
 		view: MatchView<NoInfer<TView>>,
 		move: keyof TMoves & string,

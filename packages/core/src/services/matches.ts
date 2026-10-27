@@ -1,3 +1,4 @@
+import type { ErrorResult } from '../engine/errors.js';
 import {
 	applyMove,
 	forfeitMatch,
@@ -94,7 +95,7 @@ export type MoveResult<TView = unknown> =
 			appliedVersion: number;
 			duplicate: boolean;
 	  }
-	| { ok: false; error: string; code?: string };
+	| ErrorResult;
 export const createMatchesService = (
 	// biome-ignore lint/suspicious/noExplicitAny: heterogeneous registry
 	games: Map<string, Game<any, any, any, any>>,

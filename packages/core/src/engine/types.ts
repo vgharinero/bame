@@ -1,3 +1,4 @@
+import type { ErrorInput } from './errors.js';
 import type { InvalidMove, TurnDirective } from './invalid.js';
 import type { GameRandom, RandomProvider } from './random.js';
 
@@ -74,7 +75,7 @@ export interface MoveContext<TState, TConfig = unknown> {
 	/**
 	 * Reject the move with a human-readable error message without modifying state.
 	 */
-	invalid(reason: string): InvalidMove;
+	invalid(reason: ErrorInput): InvalidMove;
 	/**
 	 * Emit a notification to specific players, `'opponents'`, or `'all'`
 	 * (e.g. when proposing a market trade offer or requiring players to discard on a 7).
@@ -161,11 +162,11 @@ export interface GameSpec<
 	name: string;
 	rulesVersion?: string;
 	randomProvider?: RandomProvider;
-	validateConfig?: (config: TConfig) => string | undefined;
+	validateConfig?: (config: TConfig) => ErrorInput | undefined;
 	validateArgs?(
 		move: keyof TMoves & string,
 		args: readonly unknown[],
-	): string | undefined;
+	): ErrorInput | undefined;
 	checkMove?(
 		view: MatchView<TView>,
 		move: keyof TMoves & string,
