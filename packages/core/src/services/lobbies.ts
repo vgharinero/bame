@@ -1,3 +1,4 @@
+import type { Profile } from './profiles.js';
 import { BameError } from '../engine/errors.js';
 import {
 	createMatch,
@@ -53,6 +54,16 @@ export interface Lobby<TConfig = unknown> {
 	matchId?: string;
 	createdAt: number;
 	updatedAt: number;
+}
+
+/** Invitation metadata excludes configuration, readiness, timestamps, stats, and match state. */
+export interface LobbyPreview {
+	game: string;
+	code: string;
+	hostId: string;
+	minPlayers: number;
+	maxPlayers: number;
+	members: { userId: string; displayName: string; avatarUrl: string | null }[];
 }
 
 export interface CreateLobbyInput<TConfig = unknown> {
@@ -178,6 +189,33 @@ export const createLobbiesService = (
 			await storage.create('lobbies', lobby);
 			await realtime.publish(lobbyChannel(lobby.id), lobby);
 			return lobby;
+		},
+
+		async previewByCode(code: string): Promise<LobbyPreview | null> {
+			const matches = await storage.find<Lobby>('lobbies', {
+				code: code.trim().toUpperCase(),
+				status: 'open',
+			});
+			if (matches.length !== 1) return null;
+			const lobby = matches[0];
+			const members = await Promise.all(
+				lobby.members.map(async ({ userId }) => {
+					const profile = await storage.get<Profile>('profiles', userId);
+					return {
+						userId,
+						displayName: profile?.displayName ?? userId,
+						avatarUrl: profile?.avatarUrl ?? null,
+					};
+				}),
+			);
+			return {
+				game: lobby.game,
+				code: lobby.code!,
+				hostId: lobby.hostId,
+				minPlayers: lobby.minPlayers,
+				maxPlayers: lobby.maxPlayers,
+				members,
+			};
 		},
 
 		async get<TConfig = unknown>(

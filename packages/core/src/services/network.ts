@@ -22,6 +22,7 @@ import {
 	type LeaveLobbyInput,
 	type ListMatchesFilter,
 	type Lobby,
+	type LobbyPreview,
 	lobbyChannel,
 	type MatchActionInput,
 	type MoveInput,
@@ -38,6 +39,7 @@ import { HttpError, identifier, validateRpc } from './rpc-validation.js';
 import { delay, readSse } from './sse.js';
 
 export type RpcAction =
+	| { service: 'lobbies'; method: 'previewByCode'; args: [code: string] }
 	| { service: 'lobbies'; method: 'create'; args: [CreateLobbyInput] }
 	| {
 			service: 'lobbies';
@@ -177,6 +179,8 @@ export const createBameHandler = (
 		action: RpcAction,
 	): Promise<unknown> => {
 		if (action.service === 'lobbies') {
+			if (action.method === 'previewByCode')
+				return bame.lobbies.previewByCode(action.args[0]);
 			if (action.method === 'list')
 				return (await bame.lobbies.list(action.args[0] ?? undefined)).map(
 					lobbyView,
@@ -513,6 +517,8 @@ export const createBameHandler = (
 				},
 			);
 		}
+		if (!response.headers.has('Cache-Control'))
+			response.headers.set('Cache-Control', 'no-store');
 		if (origin) {
 			response.headers.set('Access-Control-Allow-Origin', origin);
 			response.headers.set('Vary', 'Origin');
@@ -846,6 +852,12 @@ export const createBameClient = (
 		withOptions: (requestOptions: BameRequestOptions) =>
 			createBameClient({ ...options, ...requestOptions }),
 		lobbies: {
+			previewByCode: (code: string) =>
+				rpc<LobbyPreview | null>({
+					service: 'lobbies',
+					method: 'previewByCode',
+					args: [code],
+				}),
 			create: <TConfig = unknown>(input: CreateLobbyInput<TConfig>) =>
 				rpc<Lobby<TConfig>>({
 					service: 'lobbies',

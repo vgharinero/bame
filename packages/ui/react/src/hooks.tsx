@@ -123,8 +123,12 @@ export const BameProvider = ({
 
 	const setUserId = useCallback(
 		(nextId: string) => {
-			setInternalUserId(nextId);
-			if (typeof window !== 'undefined' && effectivePersist) {
+			if (controlledUserId === undefined) setInternalUserId(nextId);
+			if (
+				controlledUserId === undefined &&
+				typeof window !== 'undefined' &&
+				effectivePersist
+			) {
 				try {
 					const store =
 						effectivePersist === 'local'
@@ -137,22 +141,23 @@ export const BameProvider = ({
 			}
 			onUserIdChange?.(nextId);
 		},
-		[effectivePersist, storageKey, onUserIdChange],
+		[controlledUserId, effectivePersist, storageKey, onUserIdChange],
 	);
 
+	const effectiveUserId = controlledUserId ?? internalUserId;
 	useEffect(() => {
-		if (!internalUserId) return;
+		if (!effectiveUserId) return;
 		const syncProfile =
 			profile &&
 			(profile.displayName !== undefined ||
 				profile.avatarUrl !== undefined ||
 				profile.metadata !== undefined)
-				? bame.profiles.update(internalUserId, profile)
-				: bame.profiles.ensure(internalUserId);
+				? bame.profiles.update(effectiveUserId, profile)
+				: bame.profiles.ensure(effectiveUserId);
 		void syncProfile.catch(() => {
 			// Ignore background ensure/update failures on provider mount
 		});
-	}, [bame, internalUserId, profile]);
+	}, [bame, effectiveUserId, profile]);
 
 	const value = useMemo<BameContextValue>(
 		() => ({
@@ -952,146 +957,202 @@ export const useLocalMatch = <
 export const useMatchesList = <TView = unknown>(
 	filter: Omit<ListMatchesFilter, 'userId'> & { userId?: string } = {},
 ) => {
-	const { bame, userId: contextUserId } = useBame();
-	const targetUserId = filter.userId ?? contextUserId;
-	const [matches, setMatches] = useState<MatchView<TView>[]>([]);
-	const [loading, setLoading] = useState<boolean>(true);
-	const [error, setError, errorDetails] = useErrorState();
-
+	const { bame, userId } = useBame();
+	const targetUserId = filter.userId ?? userId;
+	const scope = JSON.stringify([
+		targetUserId,
+		filter.waitingForUserId,
+		filter.status,
+		filter.game,
+	]);
+	const active = useRef({ bame, scope });
+	active.current = { bame, scope };
+	const request = useRef<AbortController | null>(null);
+	const [snapshot, setSnapshot] = useState<{
+		bame: BameRuntime;
+		scope: string;
+		matches: MatchView<TView>[];
+		loading: boolean;
+		failure: unknown;
+	}>({ bame, scope, matches: [], loading: true, failure: null });
 	const refresh = useCallback(async () => {
-		setLoading(true);
-		setError(null);
+		if (active.current.bame !== bame || active.current.scope !== scope)
+			return [];
+		request.current?.abort();
+		const controller = new AbortController();
+		request.current = controller;
+		const runtime =
+			'withOptions' in bame && typeof bame.withOptions === 'function'
+				? (bame as BameClientRuntime).withOptions({ signal: controller.signal })
+				: bame;
+		const current = () =>
+			!controller.signal.aborted &&
+			request.current === controller &&
+			active.current.bame === bame &&
+			active.current.scope === scope;
+		setSnapshot((previous) => ({
+			bame,
+			scope,
+			matches:
+				previous.bame === bame && previous.scope === scope
+					? previous.matches
+					: [],
+			loading: true,
+			failure: null,
+		}));
 		try {
-			const list = await bame.matches.list<TView>({
+			const matches = await runtime.matches.list<TView>({
 				userId: targetUserId,
 				waitingForUserId: filter.waitingForUserId,
 				status: filter.status,
 				game: filter.game,
 			});
-			setMatches(list);
-			return list;
-		} catch (err) {
-			const msg =
-				err instanceof Error ? err.message : 'Failed to load matches list';
-			setError(msg, err);
+			if (current())
+				setSnapshot({ bame, scope, matches, loading: false, failure: null });
+			return current() ? matches : [];
+		} catch (failure) {
+			if (current())
+				setSnapshot((previous) => ({ ...previous, loading: false, failure }));
 			return [];
-		} finally {
-			setLoading(false);
 		}
 	}, [
 		bame,
+		scope,
 		targetUserId,
 		filter.waitingForUserId,
 		filter.status,
 		filter.game,
-		setError,
 	]);
-
 	useEffect(() => {
 		void refresh();
+		return () => request.current?.abort();
 	}, [refresh]);
-
+	const visible = snapshot.bame === bame && snapshot.scope === scope;
 	return {
-		matches,
-		loading,
-		error,
-		errorDetails,
+		matches: visible ? snapshot.matches : [],
+		loading: !visible || snapshot.loading,
+		error:
+			visible && snapshot.failure
+				? snapshot.failure instanceof Error
+					? snapshot.failure.message
+					: 'Failed to load matches list'
+				: null,
+		errorDetails: visible ? getErrorDetails(snapshot.failure) : null,
 		refresh,
 	};
 };
 
-export interface UseNotificationsOptions {
-	/** Override the player ID to subscribe notifications for */
+export interface UseNotificationsOptions<TData = unknown> {
 	userId?: string;
-	/** Automatically request permission and show native `window.Notification` alerts */
+	/** Show native alerts when permission is granted. Request permission from a user gesture. */
 	browserNotifications?: boolean;
-	/** Prefix `document.title` with `(N)` unread notification count */
 	updateDocumentTitle?: boolean;
+	formatNotification?: (notification: GameNotification<TData>) => {
+		title: string;
+		body: string;
+	};
 }
 
 export const useNotifications = <TData = unknown>(
-	optionsOrUserId?: string | UseNotificationsOptions,
+	optionsOrUserId?: string | UseNotificationsOptions<TData>,
 ) => {
-	const options: UseNotificationsOptions =
+	const options =
 		typeof optionsOrUserId === 'string'
 			? { userId: optionsOrUserId }
 			: (optionsOrUserId ?? {});
-
 	const { bame, userId: contextUserId } = useBame();
 	const userId = options.userId ?? contextUserId;
-	const [notifications, setNotifications] = useState<GameNotification<TData>[]>(
-		[],
-	);
-
+	const latestOptions = useRef(options);
+	latestOptions.current = options;
+	const [snapshot, setSnapshot] = useState<{
+		bame: BameRuntime;
+		userId: string;
+		items: GameNotification<TData>[];
+	}>({ bame, userId, items: [] });
+	const notifications =
+		snapshot.bame === bame && snapshot.userId === userId ? snapshot.items : [];
 	useEffect(() => {
+		let cancelled = false;
 		if (!userId) return;
-		if (
-			options.browserNotifications &&
-			typeof window !== 'undefined' &&
-			'Notification' in window &&
-			window.Notification.permission === 'default'
-		) {
-			void window.Notification.requestPermission().catch(() => {});
-		}
-
-		const unsub = bame.matches.subscribeNotifications<TData>(
+		setSnapshot({ bame, userId, items: [] });
+		const seen = new Set<string>();
+		const off = bame.matches.subscribeNotifications<TData>(
 			userId,
 			(incoming) => {
-				setNotifications((prev) => [incoming, ...prev]);
+				if (cancelled || seen.has(incoming.id)) return;
+				seen.add(incoming.id);
+				setSnapshot((previous) => ({
+					bame,
+					userId,
+					items: [
+						incoming,
+						...(previous.bame === bame && previous.userId === userId
+							? previous.items
+							: []),
+					],
+				}));
 				if (
-					options.browserNotifications &&
+					latestOptions.current.browserNotifications &&
 					typeof window !== 'undefined' &&
 					'Notification' in window &&
 					window.Notification.permission === 'granted'
 				) {
+					const formatted = latestOptions.current.formatNotification?.(
+						incoming,
+					) ?? { title: `Bame — ${incoming.game}`, body: incoming.message };
 					try {
-						new window.Notification(`Bame — ${incoming.game}`, {
-							body: incoming.message,
-						});
+						new window.Notification(formatted.title, { body: formatted.body });
 					} catch {
-						// Ignore notification constructor errors
+						/* Platform may require service-worker delivery. */
 					}
 				}
 			},
 		);
 		return () => {
-			unsub();
+			cancelled = true;
+			off();
 		};
-	}, [bame, userId, options.browserNotifications]);
-
+	}, [bame, userId]);
 	useEffect(() => {
 		if (!options.updateDocumentTitle || typeof document === 'undefined') return;
-		const baseTitle = document.title.replace(/^\(\d+\)\s*/, '');
-		document.title =
-			notifications.length > 0
-				? `(${notifications.length}) ${baseTitle}`
-				: baseTitle;
-	}, [notifications.length, options.updateDocumentTitle]);
-
-	const dismiss = useCallback((id: string) => {
-		setNotifications((prev) => prev.filter((n) => n.id !== id));
-	}, []);
-
-	const clear = useCallback(() => {
-		setNotifications([]);
-	}, []);
-
+		const base = document.title.replace(/^\(\d+\)\s*/, '');
+		const title = notifications.length
+			? `(${notifications.length}) ${base}`
+			: base;
+		document.title = title;
+		return () => {
+			if (document.title === title) document.title = base;
+		};
+	}, [bame, userId, notifications.length, options.updateDocumentTitle]);
+	const dismiss = useCallback(
+		(id: string) =>
+			setSnapshot((previous) =>
+				previous.bame === bame && previous.userId === userId
+					? {
+							...previous,
+							items: previous.items.filter((item) => item.id !== id),
+						}
+					: previous,
+			),
+		[bame, userId],
+	);
+	const clear = useCallback(
+		() => setSnapshot({ bame, userId, items: [] }),
+		[bame, userId],
+	);
 	const requestPermission = useCallback(async (): Promise<
 		NotificationPermission | 'unsupported'
 	> => {
-		if (typeof window === 'undefined' || !('Notification' in window)) {
+		if (typeof window === 'undefined' || !('Notification' in window))
 			return 'unsupported';
-		}
-		if (window.Notification.permission !== 'default') {
+		if (window.Notification.permission !== 'default')
 			return window.Notification.permission;
-		}
 		try {
 			return await window.Notification.requestPermission();
 		} catch {
 			return window.Notification.permission;
 		}
 	}, []);
-
 	return {
 		notifications,
 		latest: notifications[0] ?? null,

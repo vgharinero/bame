@@ -32,3 +32,9 @@ Rematch (prepare a finished round), and Close (close the room for everyone).
 Use stable guest/authenticated user IDs. Display names belong in profiles and
 may be edited or shared by multiple players. `BameProvider` can generate and
 persist guest IDs independently of profile metadata.
+
+`lobbies.previewByCode(code)` returns metadata for an open invitation without
+joining it. The preview contains game/player limits and member names/avatars,
+excluding configuration, readiness, timestamps, statistics, and match state.
+It uses the same deadlines and cancellation scopes as other client operations.
+Closed, started, missing, or ambiguous invitation codes return `null`.

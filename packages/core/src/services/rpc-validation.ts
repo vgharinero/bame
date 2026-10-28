@@ -62,7 +62,10 @@ export function validateRpc(value: unknown): RpcAction {
 			invalid('Invalid argument count');
 	};
 	if (rpc.service === 'lobbies') {
-		if (method === 'get') {
+		if (method === 'previewByCode') {
+			arity(1);
+			id(args[0]);
+		} else if (method === 'get') {
 			arity(1, 2);
 			id(args[0]);
 			id(args[1], true);

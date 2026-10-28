@@ -31,3 +31,11 @@ Authentication is provider-neutral. Dynamic `headers` callbacks resolve for ever
 attempt and SSE reconnect, supporting refreshed bearer tokens. Token changes do
 not replace an already-open stream. Dispose scopes when identity changes or on
 logout, and establish new subscriptions using the new identity/credentials.
+
+React provider identity is controlled when `userId` is supplied. Connect
+`onUserIdChange` to the owner's state for seat switching; profile synchronization
+always follows the effective identity. Notification and match-list hooks isolate
+results by runtime and user, and discard responses from superseded requests.
+Native notifications require permission requested from a user gesture; supply
+`formatNotification` for localized titles and bodies. Title counts restore the
+base title when the owning hook unmounts.
