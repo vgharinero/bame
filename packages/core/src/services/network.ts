@@ -1,3 +1,6 @@
+import { requestScope } from './request-scope.js';
+import { BameTransportError } from './transport-error.js';
+export { BameTransportError } from './transport-error.js';
 import { BameError } from '../engine/errors.js';
 import type {
 	GameNotification,
@@ -528,22 +531,22 @@ export const createBameHandler = (
 	return { fetch, GET: fetch, POST: fetch };
 };
 
-export class BameTransportError extends Error {
-	constructor(
-		message: string,
-		public requestId?: string,
-		public code?: string,
-		public params?: Record<string, unknown>,
-	) {
-		super(message);
-	}
+export interface BameRequestOptions {
+	/** Cancels requests and subscriptions created through this client scope. */
+	signal?: AbortSignal;
+	/** RPC deadline and SSE connection deadline in ms; default 15000. False disables it. */
+	requestTimeoutMs?: number | false;
 }
 export interface BameClientRuntime extends BameRuntime {
+	/** Create an independent request scope without mutating an existing client. */
+	withOptions(options: BameRequestOptions): BameClientRuntime;
 	lobbies: Omit<BameRuntime['lobbies'], 'start'> & {
 		start(input: StartLobbyInput): Promise<MatchView>;
 	};
 }
-export interface CreateBameClientOptions {
+export interface CreateBameClientOptions extends BameRequestOptions {
+	/** Explicit default subscription identity. React hooks pass their provider identity instead. */
+	userId?: string;
 	/** Base URL of the Bame server endpoint (e.g., 'http://localhost:4000/api/bame' or '/api/bame') */
 	url: string;
 	/** Optional custom fetch implementation (useful for testing or custom headers) */
@@ -564,6 +567,21 @@ export interface CreateBameClientOptions {
 export const createBameClient = (
 	options: CreateBameClientOptions,
 ): BameClientRuntime => {
+	const timeoutMs = options.requestTimeoutMs ?? 15000;
+	if (timeoutMs !== false && (!Number.isFinite(timeoutMs) || timeoutMs <= 0)) {
+		throw new Error(
+			'requestTimeoutMs must be a positive finite number or false',
+		);
+	}
+	const httpCode = (status: number) =>
+		(
+			({
+				400: 'INVALID_REQUEST',
+				401: 'UNAUTHORIZED',
+				403: 'FORBIDDEN',
+				404: 'NOT_FOUND',
+			}) as Record<number, string>
+		)[status] ?? 'TRANSPORT_ERROR';
 	const fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
 
 	const resolveHeaders = async (
@@ -577,8 +595,11 @@ export const createBameClient = (
 		return { ...base, ...custom };
 	};
 
-	let lastUserId: string | undefined;
-	const rpc = async <TResult>(action: RpcAction): Promise<TResult> => {
+	const rpcRequest = async <TResult>(
+		action: RpcAction,
+		signal: AbortSignal,
+	): Promise<TResult> => {
+		signal.throwIfAborted();
 		const isAction =
 			action.service === 'matches' &&
 			['move', 'undo', 'forfeit'].includes(action.method);
@@ -589,42 +610,41 @@ export const createBameClient = (
 				requestId: input.requestId ?? crypto.randomUUID(),
 			};
 			if (next.expectedVersion === undefined) {
-				const latest = await rpc<MatchView>({
-					service: 'matches',
-					method: 'get',
-					args: [input.matchId, input.userId],
-				});
+				const latest = await rpcRequest<MatchView>(
+					{
+						service: 'matches',
+						method: 'get',
+						args: [input.matchId, input.userId],
+					},
+					signal,
+				);
 				next.expectedVersion = latest.version;
 			}
 			action = { ...action, args: [next] } as RpcAction;
 		}
-		if (
-			action.service === 'lobbies' &&
-			!['get', 'list'].includes(action.method)
-		)
-			lastUserId = (action.args[0] as CreateLobbyInput).userId;
-		if (isAction) lastUserId = (action.args[0] as MatchActionInput).userId;
-		if (
-			action.service === 'profiles' &&
-			['ensure', 'update'].includes(action.method)
-		)
-			lastUserId = action.args[0] as string;
 		const body = JSON.stringify(action);
 		const requestId = isAction
 			? (action.args[0] as MatchActionInput).requestId
 			: undefined;
 		for (let attempt = 0; ; attempt++) {
+			signal.throwIfAborted();
 			let res: Response;
 			try {
+				const headers = await resolveHeaders({
+					'Content-Type': 'application/json',
+				});
+				signal.throwIfAborted();
 				res = await fetchImpl(options.url, {
 					method: 'POST',
-					headers: await resolveHeaders({ 'Content-Type': 'application/json' }),
+					headers,
+					signal,
 					credentials: options.credentials,
 					body,
 				});
 			} catch (error) {
+				if (signal.aborted) throw signal.reason;
 				if (isAction && attempt < 2) {
-					await delay(100 * 2 ** attempt);
+					await delay(100 * 2 ** attempt, signal);
 					continue;
 				}
 				throw new BameTransportError(
@@ -636,7 +656,7 @@ export const createBameClient = (
 			if (isAction && [502, 503, 504].includes(res.status)) {
 				await res.body?.cancel();
 				if (attempt < 2) {
-					await delay(100 * 2 ** attempt);
+					await delay(100 * 2 ** attempt, signal);
 					continue;
 				}
 				throw new BameTransportError(
@@ -655,8 +675,17 @@ export const createBameClient = (
 			try {
 				json = (await res.json()) as typeof json;
 			} catch {
+				if (signal.aborted) throw signal.reason;
+				if ([400, 401, 403, 404].includes(res.status))
+					throw new BameTransportError(
+						'Request denied',
+						requestId,
+						httpCode(res.status),
+						undefined,
+						res.status,
+					);
 				if (isAction && attempt < 2) {
-					await delay(100 * 2 ** attempt);
+					await delay(100 * 2 ** attempt, signal);
 					continue;
 				}
 				throw new BameTransportError(
@@ -665,14 +694,42 @@ export const createBameClient = (
 					'TRANSPORT_ERROR',
 				);
 			}
+			if (!json || typeof json.ok !== 'boolean')
+				throw new BameTransportError(
+					'Invalid server response',
+					requestId,
+					'TRANSPORT_ERROR',
+					undefined,
+					res.status,
+				);
 			if (!res.ok || !json.ok)
 				throw new BameTransportError(
 					json.error ?? 'Request failed',
 					requestId,
-					json.code,
+					json.code ?? httpCode(res.status),
 					json.params,
+					res.status,
 				);
 			return json.data;
+		}
+	};
+	const rpc = async <TResult>(action: RpcAction): Promise<TResult> => {
+		const isAction =
+			action.service === 'matches' &&
+			['move', 'undo', 'forfeit'].includes(action.method);
+		const requestId = isAction
+			? ((action.args[0] as MatchActionInput).requestId ?? crypto.randomUUID())
+			: undefined;
+		if (isAction)
+			action = {
+				...action,
+				args: [{ ...(action.args[0] as MatchActionInput), requestId }],
+			} as RpcAction;
+		const scope = requestScope(options.signal, timeoutMs, requestId);
+		try {
+			return await scope.run(() => rpcRequest<TResult>(action, scope.signal));
+		} finally {
+			scope.dispose();
 		}
 	};
 	const subscribeChannel = <TPayload>(
@@ -687,23 +744,39 @@ export const createBameClient = (
 			separator +
 			'channel=' +
 			encodeURIComponent(channel) +
-			(lastUserId ? `&userId=${encodeURIComponent(lastUserId)}` : '');
+			((subscription?.userId ?? options.userId)
+				? `&userId=${encodeURIComponent((subscription?.userId ?? options.userId)!)}`
+				: '');
+		const stop = () => controller.abort();
+		options.signal?.addEventListener('abort', stop, { once: true });
+		if (options.signal?.aborted) stop();
 		void (async () => {
 			let attempt = 0;
 			while (!controller.signal.aborted) {
+				const scope = requestScope(controller.signal, timeoutMs);
 				try {
-					const response = await fetchImpl(streamUrl, {
-						headers: await resolveHeaders({ Accept: 'text/event-stream' }),
-						credentials: options.credentials,
-						signal: controller.signal,
+					const response = await scope.run(async () => {
+						const headers = await resolveHeaders({
+							Accept: 'text/event-stream',
+						});
+						scope.signal.throwIfAborted();
+						return fetchImpl(streamUrl, {
+							headers,
+							credentials: options.credentials,
+							signal: scope.signal,
+						});
 					});
 					if ([400, 401, 403, 404].includes(response.status)) {
-						await response.body?.cancel();
+						const details = (await scope.run(() =>
+							response.json().catch(() => ({})),
+						)) as { error?: string; code?: string };
 						subscription?.onError?.(
 							new BameTransportError(
-								'Subscription denied',
+								details?.error ?? 'Subscription denied',
 								undefined,
-								String(response.status),
+								details?.code ?? httpCode(response.status),
+								undefined,
+								response.status,
 							),
 						);
 						return;
@@ -712,7 +785,8 @@ export const createBameClient = (
 						await response.body?.cancel();
 						throw new Error('Stream unavailable');
 					}
-					for await (const event of readSse(response.body)) {
+					scope.clearDeadline();
+					for await (const event of readSse(response.body, scope.signal)) {
 						if (controller.signal.aborted) return;
 						if (event.event === 'ready') {
 							attempt = 0;
@@ -752,6 +826,8 @@ export const createBameClient = (
 					try {
 						subscription?.onError?.(error);
 					} catch {}
+				} finally {
+					scope.dispose();
 				}
 				await delay(
 					Math.min(30000, 500 * 2 ** Math.min(attempt++, 6)) *
@@ -759,11 +835,16 @@ export const createBameClient = (
 					controller.signal,
 				);
 			}
-		})();
-		return () => controller.abort();
+		})().finally(() => options.signal?.removeEventListener('abort', stop));
+		return () => {
+			stop();
+			options.signal?.removeEventListener('abort', stop);
+		};
 	};
 
 	return {
+		withOptions: (requestOptions: BameRequestOptions) =>
+			createBameClient({ ...options, ...requestOptions }),
 		lobbies: {
 			create: <TConfig = unknown>(input: CreateLobbyInput<TConfig>) =>
 				rpc<Lobby<TConfig>>({
@@ -875,7 +956,7 @@ export const createBameClient = (
 				subscribeChannel<VersionedSnapshot<MatchView<TView>>>(
 					matchPlayerChannel(matchId, userId),
 					(snapshot) => callback(snapshot.view, snapshot.version),
-					subscription,
+					{ ...subscription, userId },
 				),
 			subscribeNotifications: <TData = unknown>(
 				userId: string,

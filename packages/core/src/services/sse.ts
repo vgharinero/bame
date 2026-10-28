@@ -5,9 +5,15 @@ export interface SseEvent {
 /** Incremental SSE parsing, including CRLF split across UTF-8 chunks. */
 export async function* readSse(
 	body: ReadableStream<Uint8Array>,
+	signal?: AbortSignal,
 ): AsyncGenerator<SseEvent> {
 	const reader = body.getReader(),
 		decoder = new TextDecoder();
+	const abort = () => {
+		void reader.cancel().catch(() => {});
+	};
+	signal?.addEventListener('abort', abort, { once: true });
+	if (signal?.aborted) abort();
 	let buffer = '',
 		pendingCR = false;
 	const normalize = (text: string) => {
@@ -51,6 +57,7 @@ export async function* readSse(
 			if (done) break;
 		}
 	} finally {
+		signal?.removeEventListener('abort', abort);
 		try {
 			await reader.cancel();
 		} finally {

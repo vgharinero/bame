@@ -53,6 +53,8 @@ export type StorageOperation<T = any> =
 	  };
 
 export interface SubscriptionOptions {
+	/** Caller identity for private remote lobby subscriptions. Never inferred from previous calls. */
+	userId?: string;
 	onReady?: () => void | Promise<void>;
 	onError?: (error: unknown) => void;
 }

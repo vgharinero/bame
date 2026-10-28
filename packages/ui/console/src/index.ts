@@ -328,9 +328,13 @@ const runOnlineConsoleSession = async <
 					}
 				};
 
-				const unsub = bame.lobbies.subscribe(lobby.id, (updated) => {
-					void handleLobbyUpdate(updated);
-				});
+				const unsub = bame.lobbies.subscribe(
+					lobby.id,
+					(updated) => {
+						void handleLobbyUpdate(updated);
+					},
+					{ userId: myUserId },
+				);
 
 				const pollTimer = setInterval(() => {
 					void bame.lobbies.get<TConfig>(lobby.id, myUserId).then((latest) => {

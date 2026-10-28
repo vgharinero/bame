@@ -71,9 +71,13 @@ describe('@bame/storage-local', () => {
 			expect(lobby.code).toBeDefined();
 
 			const updates: number[] = [];
-			const unsub = client.lobbies.subscribe(lobby.id, (updated) => {
-				updates.push(updated.members.length);
-			});
+			const unsub = client.lobbies.subscribe(
+				lobby.id,
+				(updated) => {
+					updates.push(updated.members.length);
+				},
+				{ userId: 'Viti' },
+			);
 
 			await client.lobbies.joinByCode({
 				userId: 'Alice',

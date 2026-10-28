@@ -1,6 +1,6 @@
 # Lobby lifecycle and recovery
 
-Local matches continue to use `useLocalMatch`. Online games can use `useLobby`
+Local matches use `useLocalMatch`. Online games can use `useLobby`
 with their own UI or `LobbyGate` with its composable components. Games do not
 need separate implementations of subscription ordering or recovery polling.
 

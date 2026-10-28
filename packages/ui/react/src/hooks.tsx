@@ -1,5 +1,6 @@
 import {
 	type BameRuntime,
+	type BameClientRuntime,
 	type CreateLobbyInput,
 	canMove as checkCanMove,
 	type ErrorDetails,
@@ -244,6 +245,11 @@ export const useLobby = <TConfig = unknown>(
 		}
 
 		let cancelled = false;
+		const controller = new AbortController();
+		const runtime =
+			'withOptions' in bame && typeof bame.withOptions === 'function'
+				? (bame as BameClientRuntime).withOptions({ signal: controller.signal })
+				: bame;
 		let pending: Promise<void> | null = null;
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		versionRef.current = 0;
@@ -255,7 +261,7 @@ export const useLobby = <TConfig = unknown>(
 			if (cancelled) return Promise.resolve();
 			if (pending) return pending;
 			const requestedAtVersion = versionRef.current;
-			pending = bame.lobbies
+			pending = runtime.lobbies
 				.get<TConfig>(lobbyId, userId)
 				.then((next) => {
 					if (cancelled) return;
@@ -288,12 +294,13 @@ export const useLobby = <TConfig = unknown>(
 				timer = setTimeout(() => void poll(), pollIntervalMs);
 			}
 		};
-		const unsub = bame.lobbies.subscribe(
+		const unsub = runtime.lobbies.subscribe(
 			lobbyId,
 			(updated) => {
 				if (!cancelled) applyLobbySnapshot(updated as Lobby<TConfig>);
 			},
 			{
+				userId,
 				onReady: () => refresh(),
 				onError: (error) => {
 					if (!cancelled)
@@ -309,6 +316,7 @@ export const useLobby = <TConfig = unknown>(
 		void poll();
 		return () => {
 			cancelled = true;
+			controller.abort();
 			clearTimeout(timer);
 			unsub();
 		};
