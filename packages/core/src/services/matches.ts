@@ -75,6 +75,8 @@ export interface BameMoveHookEvent {
 }
 
 export interface BameHooks {
+	/** Invoked after a persisted transition to finished, including forfeits. */
+	onMatchEnd?: (event: BameMatchEndHookEvent) => void | Promise<void>;
 	/**
 	 * Invoked on the server after any valid move is persisted.
 	 * Ideal for sending push notifications, emails, or webhooks in multi-day async games
@@ -86,6 +88,15 @@ export interface BameHooks {
 	 * (e.g. Catan market trade offers or robber discard alerts).
 	 */
 	onNotify?: (notification: GameNotification) => void | Promise<void>;
+}
+
+export interface BameMatchEndHookEvent {
+	eventId: string;
+	requestId?: string;
+	match: Match;
+	previousMatch: Match;
+	playerId: string;
+	action: 'move' | 'undo' | 'forfeit';
 }
 
 export type MoveResult<TView = unknown> =
@@ -310,6 +321,20 @@ export const createMatchesService = (
 							notifications: structuredClone(notifications),
 						}),
 					{ ...context, operation: 'hook.onMove' },
+					onError,
+				);
+			if (outcome.match.status === 'finished' && match.status !== 'finished')
+				await bestEffort(
+					() =>
+						hooks?.onMatchEnd?.({
+							eventId,
+							requestId: input.requestId,
+							match: structuredClone(outcome.match),
+							previousMatch: structuredClone(match),
+							playerId: input.userId,
+							action: kind,
+						}),
+					{ ...context, operation: 'hook.onMatchEnd' },
 					onError,
 				);
 			return {
