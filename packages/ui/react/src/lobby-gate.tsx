@@ -161,11 +161,12 @@ const LobbyGateRoot = <TConfig = unknown>({
 		],
 	);
 
-	const statusAttr = !lobby
-		? 'idle'
-		: lobby.status === 'started' && lobby.matchId
-			? 'started'
-			: 'waiting';
+	const statusAttr =
+		!lobby || lobby.status === 'closed'
+			? 'idle'
+			: lobby.status === 'started' && lobby.matchId
+				? 'started'
+				: 'waiting';
 
 	const content = typeof children === 'function' ? children(ctx) : children;
 
@@ -193,7 +194,7 @@ export interface LobbyGateIdleProps {
 
 const LobbyGateIdle = ({ className, children }: LobbyGateIdleProps) => {
 	const { lobby } = useLobbyGate();
-	if (lobby) return null;
+	if (lobby && lobby.status !== 'closed') return null;
 	return (
 		<div data-bame-lobby-idle="" className={className}>
 			{children}
@@ -288,7 +289,7 @@ const LobbyGateWaitingRoom = ({
 	children,
 }: LobbyGateWaitingRoomProps) => {
 	const { lobby, isHost, canStart } = useLobbyGate();
-	if (!lobby || (lobby.status === 'started' && lobby.matchId)) {
+	if (!lobby || lobby.status !== 'open') {
 		return null;
 	}
 	return (

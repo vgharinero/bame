@@ -179,8 +179,16 @@ export interface CreateLobbyHookInput<TConfig = unknown>
 	userId?: string;
 }
 
+export interface UseLobbyOptions<TConfig = unknown> {
+	/** Seed a room returned by create/join without a loading flash. */
+	initialLobby?: Lobby<TConfig>;
+	/** Recovery polling in milliseconds; false disables it. Default: 2000. */
+	pollIntervalMs?: number | false;
+}
+
 export const useLobby = <TConfig = unknown>(
 	controlledLobbyId: string | null = null,
+	{ initialLobby, pollIntervalMs = 2000 }: UseLobbyOptions<TConfig> = {},
 ) => {
 	const { bame, userId } = useBame();
 	const [internalLobbyId, setInternalLobbyId] = useState<string | null>(
@@ -191,7 +199,7 @@ export const useLobby = <TConfig = unknown>(
 	const [lobbySnapshot, storeLobby] = useState<{
 		owner: string;
 		value: Lobby<TConfig> | null;
-	}>({ owner: userId, value: null });
+	}>({ owner: userId, value: initialLobby ?? null });
 	const setLobby = useCallback(
 		(value: Lobby<TConfig> | null) => storeLobby({ owner: userId, value }),
 		[userId],
@@ -219,7 +227,7 @@ export const useLobby = <TConfig = unknown>(
 				setLobby(null);
 				return;
 			}
-			if (next.version >= versionRef.current) {
+			if (next.version > versionRef.current) {
 				versionRef.current = next.version;
 				setLobby(next);
 			}
@@ -236,39 +244,84 @@ export const useLobby = <TConfig = unknown>(
 		}
 
 		let cancelled = false;
+		let pending: Promise<void> | null = null;
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		versionRef.current = 0;
-		setLoading(true);
+		if (initialLobby?.id === lobbyId) applyLobbySnapshot(initialLobby);
+		setLoading(!initialLobby || initialLobby.id !== lobbyId);
 		setError(null);
 
-		bame.lobbies
-			.get<TConfig>(lobbyId, userId)
-			.then((fetched) => {
-				if (!cancelled) {
-					applyLobbySnapshot(fetched);
-					setLoading(false);
-				}
-			})
-			.catch((err: unknown) => {
-				if (!cancelled) {
-					setError(
-						err instanceof Error ? err.message : 'Failed to load lobby',
-						err,
-					);
-					setLoading(false);
-				}
-			});
-
-		const unsub = bame.lobbies.subscribe(lobbyId, (updated) => {
-			if (!cancelled) {
-				applyLobbySnapshot(updated as Lobby<TConfig>);
+		const refresh = (): Promise<void> => {
+			if (cancelled) return Promise.resolve();
+			if (pending) return pending;
+			const requestedAtVersion = versionRef.current;
+			pending = bame.lobbies
+				.get<TConfig>(lobbyId, userId)
+				.then((next) => {
+					if (cancelled) return;
+					// A delayed missing-room response must not clear a newer stream snapshot.
+					if (next || versionRef.current === requestedAtVersion)
+						applyLobbySnapshot(next);
+					setError(null);
+				})
+				.catch((error: unknown) => {
+					if (!cancelled)
+						setError(
+							error instanceof Error ? error.message : 'Failed to load lobby',
+							error,
+						);
+				})
+				.finally(() => {
+					pending = null;
+					if (!cancelled) setLoading(false);
+				});
+			return pending;
+		};
+		const poll = async () => {
+			await refresh();
+			if (
+				!cancelled &&
+				pollIntervalMs !== false &&
+				Number.isFinite(pollIntervalMs) &&
+				pollIntervalMs > 0
+			) {
+				timer = setTimeout(() => void poll(), pollIntervalMs);
 			}
-		});
-
+		};
+		const unsub = bame.lobbies.subscribe(
+			lobbyId,
+			(updated) => {
+				if (!cancelled) applyLobbySnapshot(updated as Lobby<TConfig>);
+			},
+			{
+				onReady: () => refresh(),
+				onError: (error) => {
+					if (!cancelled)
+						setError(
+							error instanceof Error
+								? error.message
+								: 'Lobby subscription failed',
+							error,
+						);
+				},
+			},
+		);
+		void poll();
 		return () => {
 			cancelled = true;
+			clearTimeout(timer);
 			unsub();
 		};
-	}, [bame, lobbyId, userId, applyLobbySnapshot, setLobby, setError]);
+	}, [
+		bame,
+		lobbyId,
+		userId,
+		initialLobby,
+		pollIntervalMs,
+		applyLobbySnapshot,
+		setLobby,
+		setError,
+	]);
 
 	const create = useCallback(
 		async (input: CreateLobbyHookInput<TConfig>) => {
@@ -411,6 +464,54 @@ export const useLobby = <TConfig = unknown>(
 		}
 	}, [bame, lobbyId, userId, setError]);
 
+	const close = useCallback(async () => {
+		if (!lobbyId) return null;
+		setActing(true);
+		setError(null);
+		try {
+			const updated = (await bame.lobbies.close({
+				userId,
+				lobbyId,
+			})) as Lobby<TConfig>;
+			applyLobbySnapshot(updated);
+			return updated;
+		} catch (error) {
+			setError(
+				error instanceof Error ? error.message : 'Failed to close lobby',
+				error,
+			);
+			throw error;
+		} finally {
+			setActing(false);
+		}
+	}, [bame, lobbyId, userId, applyLobbySnapshot, setError]);
+
+	const rematch = useCallback(
+		async (matchId: string) => {
+			if (!lobbyId) return null;
+			setActing(true);
+			setError(null);
+			try {
+				const updated = (await bame.lobbies.rematch({
+					userId,
+					lobbyId,
+					matchId,
+				})) as Lobby<TConfig>;
+				applyLobbySnapshot(updated);
+				return updated;
+			} catch (error) {
+				setError(
+					error instanceof Error ? error.message : 'Failed to prepare rematch',
+					error,
+				);
+				throw error;
+			} finally {
+				setActing(false);
+			}
+		},
+		[bame, lobbyId, userId, applyLobbySnapshot, setError],
+	);
+
 	const reset = useCallback(() => {
 		versionRef.current = 0;
 		setInternalLobbyId(null);
@@ -447,6 +548,8 @@ export const useLobby = <TConfig = unknown>(
 		setReady,
 		leave,
 		start,
+		close,
+		rematch,
 		reset,
 	};
 };

@@ -30,7 +30,7 @@ export const generateJoinCode = (length = 6): string => {
 	return code;
 };
 
-export type LobbyStatus = 'open' | 'started';
+export type LobbyStatus = 'open' | 'started' | 'closed';
 
 export interface LobbyMember {
 	userId: string;
@@ -85,6 +85,14 @@ export interface SetReadyInput {
 export interface LeaveLobbyInput {
 	userId: string;
 	lobbyId: string;
+}
+
+/** Host-only closure keeps match history and broadcasts a terminal lobby snapshot. */
+export interface CloseLobbyInput extends LeaveLobbyInput {}
+
+/** The completed match ID makes retries safe across subsequent rounds. */
+export interface RematchLobbyInput extends LeaveLobbyInput {
+	matchId: string;
 }
 
 export interface StartLobbyInput {
@@ -452,6 +460,77 @@ export const createLobbiesService = (
 			});
 		},
 
+		/** Close the room for every member; leaving alone still transfers ownership. */
+		async close(input: CloseLobbyInput): Promise<Lobby> {
+			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
+				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
+				if (!lobby) throw new BameError({ code: 'LOBBY_NOT_FOUND' });
+				if (lobby.hostId !== input.userId)
+					throw new BameError({ code: 'LOBBY_HOST_REQUIRED' });
+				if (lobby.status === 'closed') return lobby;
+				const updated: Lobby = {
+					...lobby,
+					status: 'closed',
+					version: lobby.version + 1,
+					updatedAt: Date.now(),
+				};
+				try {
+					await storage.update('lobbies', updated, lobby.version);
+				} catch (error) {
+					if (
+						error instanceof VersionConflictError &&
+						attempt < MAX_CAS_RETRIES - 1
+					)
+						continue;
+					throw error;
+				}
+				await realtime.publish(lobbyChannel(lobby.id), updated);
+				return updated;
+			}
+			throw new BameError({ code: 'CONFLICT' });
+		},
+
+		/** Reopen a completed round with the same members, readiness, code, and config. */
+		async rematch(input: RematchLobbyInput): Promise<Lobby> {
+			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
+				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
+				if (!lobby) throw new BameError({ code: 'LOBBY_NOT_FOUND' });
+				if (lobby.hostId !== input.userId)
+					throw new BameError({ code: 'LOBBY_HOST_REQUIRED' });
+				if (lobby.status === 'closed')
+					throw new BameError({ code: 'LOBBY_CLOSED' });
+				const previous = await storage.get<Match>('matches', input.matchId);
+				if (!previous || (previous.lobbyId ?? previous.id) !== lobby.id)
+					throw new BameError({ code: 'LOBBY_MATCH_MISMATCH' });
+				if (previous.status !== 'finished')
+					throw new BameError({ code: 'MATCH_ACTIVE' });
+				// A repeated request after reopening must not start another round.
+				if (lobby.status === 'open' && !lobby.matchId) return lobby;
+				if (lobby.matchId !== input.matchId)
+					throw new BameError({ code: 'LOBBY_MATCH_MISMATCH' });
+				const { matchId: _completedMatchId, ...room } = lobby;
+				const updated: Lobby = {
+					...room,
+					status: 'open',
+					version: lobby.version + 1,
+					updatedAt: Date.now(),
+				};
+				try {
+					await storage.update('lobbies', updated, lobby.version);
+				} catch (error) {
+					if (
+						error instanceof VersionConflictError &&
+						attempt < MAX_CAS_RETRIES - 1
+					)
+						continue;
+					throw error;
+				}
+				await realtime.publish(lobbyChannel(lobby.id), updated);
+				return updated;
+			}
+			throw new BameError({ code: 'CONFLICT' });
+		},
+
 		async start(input: StartLobbyInput): Promise<Match> {
 			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
 				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
@@ -467,6 +546,8 @@ export const createLobbiesService = (
 						code: 'LOBBY_HOST_REQUIRED',
 						message: 'Only the lobby host can start the match',
 					});
+				if (lobby.status === 'closed')
+					throw new BameError({ code: 'LOBBY_CLOSED' });
 				// Idempotent: if already started and match exists, return existing match
 				if (lobby.status === 'started' && lobby.matchId) {
 					const existingMatch = await storage.get<Match>(
@@ -506,7 +587,9 @@ export const createLobbiesService = (
 				}
 
 				const game = requireGame(lobby.game);
-				const matchId = lobby.id;
+				const matchId = (await storage.get<Match>('matches', lobby.id))
+					? globalThis.crypto.randomUUID()
+					: lobby.id;
 				const match = createMatch(
 					game as Game<unknown, MoveMap<unknown>, unknown, unknown>,
 					{
@@ -516,6 +599,8 @@ export const createLobbiesService = (
 						seed: input.seed,
 					},
 				);
+
+				match.lobbyId = lobby.id;
 
 				const updatedLobby: Lobby = {
 					...lobby,

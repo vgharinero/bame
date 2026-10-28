@@ -238,6 +238,8 @@ export interface MoveRecord {
 
 export interface Match<TState = unknown, TConfig = unknown> {
 	id: string;
+	/** Room that created this match, retained across rematches. */
+	lobbyId?: string;
 	rulesVersion: string;
 	randomProviderId: string;
 	receipts?: ActionReceipt[];

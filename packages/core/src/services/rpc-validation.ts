@@ -78,6 +78,8 @@ export function validateRpc(value: unknown): RpcAction {
 				setReady: ['userId', 'lobbyId', 'ready'],
 				leave: ['userId', 'lobbyId'],
 				start: ['userId', 'lobbyId'],
+				close: ['userId', 'lobbyId'],
+				rematch: ['userId', 'lobbyId', 'matchId'],
 			};
 			if (!Object.hasOwn(allowed, method)) invalid('Unknown lobby method');
 			const input = fields(args[0], allowed[method]);
@@ -87,6 +89,7 @@ export function validateRpc(value: unknown): RpcAction {
 				bool(input.isPrivate);
 			} else if (method === 'joinByCode') id(input.code);
 			else id(input.lobbyId);
+			if (method === 'rematch') id(input.matchId);
 			bool(input.readyByDefault);
 			if (method === 'setReady' && typeof input.ready !== 'boolean')
 				invalid('Expected ready boolean');
