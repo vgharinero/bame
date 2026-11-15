@@ -1,16 +1,21 @@
 // @vitest-environment happy-dom
-import { act, useState, type ReactNode } from 'react';
+
+import {
+	type BameRuntime,
+	createBame,
+	defineGame,
+	type GameNotification,
+	type MatchView,
+	type MoveContext,
+	type SetupContext,
+} from '@bame/core';
+import { act, type ReactNode, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
-	createBame,
-	type BameRuntime,
-	type MatchView,
-	type GameNotification,
-} from '@bame/core';
-import {
 	BameProvider,
 	useBame,
+	useMatch,
 	useMatchesList,
 	useNotifications,
 } from './hooks.js';
@@ -41,6 +46,59 @@ afterEach(async () => {
 	for (const cleanup of cleanups.splice(0)) await cleanup();
 	vi.unstubAllGlobals();
 	vi.restoreAllMocks();
+	vi.useRealTimers();
+});
+
+type Counter = { count: number };
+
+function setupCounter(_context: SetupContext): Counter {
+	return { count: 0 };
+}
+
+function increment({ state }: MoveContext<Counter>) {
+	state.count++;
+}
+
+it('recovers the active turn when the match stream stays open without delivering moves', async () => {
+	vi.useFakeTimers();
+	const game = defineGame({
+		name: 'poll-counter',
+		players: 2,
+		setup: setupCounter,
+		moves: { increment },
+	});
+	const api = createBame({ games: [game] });
+	const lobby = await api.lobbies.create({ userId: 'one', game: game.name });
+	await api.lobbies.join({ userId: 'two', lobbyId: lobby.id });
+	const match = await api.lobbies.start({ userId: 'one', lobbyId: lobby.id });
+	vi.spyOn(api.matches, 'subscribe').mockImplementation(
+		(_matchId, _userId, _onUpdate, options) => {
+			void options?.onReady?.();
+			return () => {};
+		},
+	);
+	function Probe() {
+		const { turn } = useMatch(game, match.id, { pollIntervalMs: 100 });
+		return <span>{turn?.currentPlayerId}</span>;
+	}
+	const screen = await render(
+		<BameProvider bame={api} userId="two">
+			<Probe />
+		</BameProvider>,
+	);
+	expect(screen.textContent).toBe('one');
+	await act(async () => {
+		const result = await api.matches.move({
+			matchId: match.id,
+			userId: 'one',
+			move: 'increment',
+			args: [],
+		});
+		expect(result.ok).toBe(true);
+	});
+	expect(screen.textContent).toBe('one');
+	await act(async () => vi.advanceTimersByTimeAsync(100));
+	expect(screen.textContent).toBe('two');
 });
 
 describe('provider-controlled identity', () => {

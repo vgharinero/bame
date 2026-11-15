@@ -454,6 +454,7 @@ export const createBameHandler = (
 			headers: {
 				'Content-Type': 'text/event-stream',
 				'Cache-Control': 'no-cache, no-transform',
+				'X-Accel-Buffering': 'no',
 			},
 		});
 	};

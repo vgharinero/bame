@@ -580,6 +580,8 @@ export type BoundMoves<
 export interface UseMatchOptions {
 	/** Override the active player ID instead of reading from `BameProvider` */
 	userId?: string;
+	/** Recovery polling interval in milliseconds. Disabled by default. */
+	pollIntervalMs?: number | false;
 	/**
 	 * Automatically update `BameProvider`'s `userId` to `turn.currentPlayerId`
 	 * after a valid move or undo in local hot-seat multiplayer games.
@@ -609,6 +611,7 @@ export const useMatch = <
 			: (optionsOrUserId ?? {});
 	const { bame, userId: contextUserId, setUserId } = useBame();
 	const userId = options.userId ?? contextUserId;
+	const pollIntervalMs = options.pollIntervalMs || 0;
 	const scope = JSON.stringify([matchId, userId]);
 	const scopeRef = useRef(scope);
 	scopeRef.current = scope;
@@ -690,13 +693,28 @@ export const useMatch = <
 			},
 		);
 		void feed.refetch().catch(failed);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		async function poll() {
+			const initial = !feed.view;
+			try {
+				await feed.refetch();
+				if (initial && active()) setError(null);
+			} catch (error) {
+				if (!feed.view) failed(error);
+			} finally {
+				if (active()) timer = setTimeout(() => void poll(), pollIntervalMs);
+			}
+		}
+		if (Number.isFinite(pollIntervalMs) && pollIntervalMs > 0)
+			timer = setTimeout(() => void poll(), pollIntervalMs);
 		return () => {
 			cancelled = true;
 			liveRef.current = false;
 			if (feedRef.current === feed) feedRef.current = null;
+			clearTimeout(timer);
 			unsub();
 		};
-	}, [bame, matchId, userId, scope, setError]);
+	}, [bame, matchId, userId, scope, setError, pollIntervalMs]);
 	const perform = useCallback(
 		async (
 			kind: 'move' | 'undo' | 'forfeit',

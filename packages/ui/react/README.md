@@ -110,6 +110,10 @@ const {
 } = useMatch(rockPaperScissors, matchId);
 ```
 
+Set `pollIntervalMs` to periodically fetch the latest match snapshot alongside
+the realtime subscription. This helps clients recover when a proxy delays or
+drops stream updates. Recovery polling is disabled by default.
+
 ### `useLobby(controlledLobbyId?)`
 Subscribes to a lobby's realtime state (controlled or uncontrolled) and provides helpers to create, join by ID or 6-letter join code, toggle ready, leave, or start the match:
 
