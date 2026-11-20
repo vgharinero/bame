@@ -14,6 +14,9 @@ late responses after cleanup.
 
 - `lobbies.leave({ userId, lobbyId })`: remove only the caller; transfer host
   ownership to the next member if needed.
+- `lobbies.kick({ userId, lobbyId, targetUserId })`: host only, while the room
+  is open. Remove another waiting member without closing the room or removing
+  the host; repeated kicks are idempotent.
 - `lobbies.close({ userId, lobbyId })`: host only. Persist and publish a `closed`
   lobby snapshot. Repeated closure is idempotent. Closure does not end/delete an
   existing match; match history and participant access remain intact. Closed rooms
@@ -25,7 +28,7 @@ late responses after cleanup.
   and configuration. Existing matches remain unchanged. The next Start creates a
   distinct match. A stale rematch request cannot reopen a subsequent round.
 
-The React hook exposes `close()` and `rematch(matchId)` alongside `leave()` and
+The React hook exposes `close()`, `kick(targetUserId)`, and `rematch(matchId)` alongside `leave()` and
 `start()`. For a custom online UI, separate Resume (open the existing match),
 Rematch (prepare a finished round), and Close (close the room for everyone).
 

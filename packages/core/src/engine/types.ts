@@ -163,6 +163,8 @@ export interface GameSpec<
 	rulesVersion?: string;
 	randomProvider?: RandomProvider;
 	validateConfig?: (config: TConfig) => ErrorInput | undefined;
+	/** Optional dynamic player bounds derived from validated lobby/match config. */
+	playerBounds?: (config: TConfig) => PlayerConfig | undefined;
 	validateArgs?(
 		move: keyof TMoves & string,
 		args: readonly unknown[],

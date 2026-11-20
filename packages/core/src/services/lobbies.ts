@@ -5,6 +5,7 @@ import {
 	type Game,
 	type Match,
 	type MoveMap,
+	normalizePlayers,
 	viewFor,
 } from '../engine/index.js';
 import {
@@ -101,6 +102,11 @@ export interface LeaveLobbyInput {
 /** Host-only closure keeps match history and broadcasts a terminal lobby snapshot. */
 export interface CloseLobbyInput extends LeaveLobbyInput {}
 
+/** Host-only eviction removes another waiting player from an open lobby. */
+export interface KickLobbyInput extends LeaveLobbyInput {
+	targetUserId: string;
+}
+
 /** The completed match ID makes retries safe across subsequent rounds. */
 export interface RematchLobbyInput extends LeaveLobbyInput {
 	matchId: string;
@@ -134,6 +140,27 @@ export const createLobbiesService = (
 		return game;
 	};
 
+	const resolvePlayerBounds = (
+		// biome-ignore lint/suspicious/noExplicitAny: heterogeneous game registry
+		game: Game<any, any, any, any>,
+		config: unknown,
+	) => {
+		const custom = game.playerBounds?.(config);
+		if (!custom) {
+			return { minPlayers: game.minPlayers, maxPlayers: game.maxPlayers };
+		}
+		const resolved = normalizePlayers(custom);
+		const minPlayers = Math.max(
+			game.minPlayers,
+			Math.min(game.maxPlayers, resolved.minPlayers),
+		);
+		const maxPlayers = Math.max(
+			minPlayers,
+			Math.min(game.maxPlayers, resolved.maxPlayers),
+		);
+		return { minPlayers, maxPlayers };
+	};
+
 	const generateUniqueCode = async (): Promise<string> => {
 		for (let attempt = 0; attempt < 10; attempt++) {
 			const code = generateJoinCode();
@@ -163,6 +190,7 @@ export const createLobbiesService = (
 			const code = input.isPrivate ? await generateUniqueCode() : null;
 			const now = Date.now();
 			const ready = input.readyByDefault ?? true;
+			const { minPlayers, maxPlayers } = resolvePlayerBounds(game, input.config);
 
 			const lobby: Lobby<TConfig> = {
 				id: globalThis.crypto.randomUUID(),
@@ -172,8 +200,8 @@ export const createLobbiesService = (
 				status: 'open',
 				isPublic,
 				code,
-				minPlayers: game.minPlayers,
-				maxPlayers: game.maxPlayers,
+				minPlayers,
+				maxPlayers,
 				config: (input.config ?? undefined) as TConfig,
 				members: [
 					{
@@ -496,6 +524,45 @@ export const createLobbiesService = (
 				code: 'CONFLICT',
 				message: 'Failed to leave lobby due to concurrent updates',
 			});
+		},
+
+		/** Host-only eviction removes another waiting player from an open lobby. */
+		async kick(input: KickLobbyInput): Promise<Lobby> {
+			for (let attempt = 0; attempt < MAX_CAS_RETRIES; attempt++) {
+				const lobby = await storage.get<Lobby>('lobbies', input.lobbyId);
+				if (!lobby) throw new BameError({ code: 'LOBBY_NOT_FOUND' });
+				if (lobby.hostId !== input.userId)
+					throw new BameError({ code: 'LOBBY_HOST_REQUIRED' });
+				if (lobby.status === 'closed')
+					throw new BameError({ code: 'LOBBY_CLOSED' });
+				if (lobby.status !== 'open')
+					throw new BameError({ code: 'MATCH_ACTIVE' });
+				if (input.targetUserId === lobby.hostId)
+					throw new BameError({ code: 'CANNOT_KICK_HOST' });
+				const remaining = lobby.members.filter(
+					(m) => m.userId !== input.targetUserId,
+				);
+				if (remaining.length === lobby.members.length) return lobby;
+				const updated: Lobby = {
+					...lobby,
+					version: lobby.version + 1,
+					members: remaining,
+					updatedAt: Date.now(),
+				};
+				try {
+					await storage.update('lobbies', updated, lobby.version);
+				} catch (error) {
+					if (
+						error instanceof VersionConflictError &&
+						attempt < MAX_CAS_RETRIES - 1
+					)
+						continue;
+					throw error;
+				}
+				await realtime.publish(lobbyChannel(lobby.id), updated);
+				return updated;
+			}
+			throw new BameError({ code: 'CONFLICT' });
 		},
 
 		/** Close the room for every member; leaving alone still transfers ownership. */

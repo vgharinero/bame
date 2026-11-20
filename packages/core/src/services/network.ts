@@ -19,6 +19,7 @@ import {
 	type RematchLobbyInput,
 	type JoinLobbyByCodeInput,
 	type JoinLobbyInput,
+	type KickLobbyInput,
 	type LeaveLobbyInput,
 	type ListMatchesFilter,
 	type Lobby,
@@ -51,6 +52,7 @@ export type RpcAction =
 	| { service: 'lobbies'; method: 'joinByCode'; args: [JoinLobbyByCodeInput] }
 	| { service: 'lobbies'; method: 'setReady'; args: [SetReadyInput] }
 	| { service: 'lobbies'; method: 'leave'; args: [LeaveLobbyInput] }
+	| { service: 'lobbies'; method: 'kick'; args: [KickLobbyInput] }
 	| { service: 'lobbies'; method: 'start'; args: [StartLobbyInput] }
 	| { service: 'lobbies'; method: 'close'; args: [CloseLobbyInput] }
 	| { service: 'lobbies'; method: 'rematch'; args: [RematchLobbyInput] }
@@ -218,6 +220,8 @@ export const createBameHandler = (
 					return lobbyView(
 						await bame.lobbies.leave(trusted as LeaveLobbyInput),
 					);
+				case 'kick':
+					return lobbyView(await bame.lobbies.kick(trusted as KickLobbyInput));
 				case 'close':
 					return lobbyView(
 						await bame.lobbies.close(trusted as CloseLobbyInput),
@@ -901,6 +905,8 @@ export const createBameClient = (
 					method: 'leave',
 					args: [input],
 				}),
+			kick: (input: KickLobbyInput) =>
+				rpc<Lobby>({ service: 'lobbies', method: 'kick', args: [input] }),
 			close: (input: CloseLobbyInput) =>
 				rpc<Lobby>({ service: 'lobbies', method: 'close', args: [input] }),
 			rematch: (input: RematchLobbyInput) =>

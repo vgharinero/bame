@@ -499,6 +499,32 @@ export const useLobby = <TConfig = unknown>(
 		}
 	}, [bame, lobbyId, userId, applyLobbySnapshot, setError]);
 
+	const kick = useCallback(
+		async (targetUserId: string) => {
+			if (!lobbyId) return null;
+			setActing(true);
+			setError(null);
+			try {
+				const updated = (await bame.lobbies.kick({
+					userId,
+					lobbyId,
+					targetUserId,
+				})) as Lobby<TConfig>;
+				applyLobbySnapshot(updated);
+				return updated;
+			} catch (error) {
+				setError(
+					error instanceof Error ? error.message : 'Failed to kick player',
+					error,
+				);
+				throw error;
+			} finally {
+				setActing(false);
+			}
+		},
+		[bame, lobbyId, userId, applyLobbySnapshot, setError],
+	);
+
 	const rematch = useCallback(
 		async (matchId: string) => {
 			if (!lobbyId) return null;
@@ -560,6 +586,7 @@ export const useLobby = <TConfig = unknown>(
 		joinByCode,
 		setReady,
 		leave,
+		kick,
 		start,
 		close,
 		rematch,

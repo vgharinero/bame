@@ -46,6 +46,7 @@ export const defineGame = <
 	rulesVersion?: string;
 	randomProvider?: RandomProvider;
 	validateConfig?: (config: NoInfer<TConfig>) => ErrorInput | undefined;
+	playerBounds?: (config: NoInfer<TConfig>) => PlayerConfig | undefined;
 	validateArgs?: (
 		move: keyof TMoves & string,
 		args: readonly unknown[],

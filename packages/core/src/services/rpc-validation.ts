@@ -80,6 +80,7 @@ export function validateRpc(value: unknown): RpcAction {
 				joinByCode: ['userId', 'code', 'readyByDefault'],
 				setReady: ['userId', 'lobbyId', 'ready'],
 				leave: ['userId', 'lobbyId'],
+				kick: ['userId', 'lobbyId', 'targetUserId'],
 				start: ['userId', 'lobbyId'],
 				close: ['userId', 'lobbyId'],
 				rematch: ['userId', 'lobbyId', 'matchId'],
@@ -92,6 +93,7 @@ export function validateRpc(value: unknown): RpcAction {
 				bool(input.isPrivate);
 			} else if (method === 'joinByCode') id(input.code);
 			else id(input.lobbyId);
+			if (method === 'kick') id(input.targetUserId);
 			if (method === 'rematch') id(input.matchId);
 			bool(input.readyByDefault);
 			if (method === 'setReady' && typeof input.ready !== 'boolean')
