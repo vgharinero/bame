@@ -1,6 +1,6 @@
 import {
-	type BameRuntime,
 	type BameClientRuntime,
+	type BameRuntime,
 	type CreateLobbyInput,
 	canMove as checkCanMove,
 	type ErrorDetails,
@@ -17,6 +17,8 @@ import {
 	type MoveMap,
 	type MoveResult,
 	type MovesOf,
+	type PresenceEntry,
+	type PresenceStatus,
 	type Profile,
 	type StateOf,
 	type UpdateProfileInput,
@@ -1318,4 +1320,150 @@ export const useLeaderboard = () => {
 		errorDetails,
 		refresh,
 	};
+};
+
+export interface UsePresenceOptions {
+	userId?: string;
+	enabled?: boolean;
+	heartbeatMs?: number;
+}
+
+const currentWindowPresence = (): PresenceStatus => {
+	if (typeof document === 'undefined') return 'online';
+	return document.visibilityState === 'visible' && document.hasFocus()
+		? 'online'
+		: 'away';
+};
+
+export const usePresence = (
+	scope: string | null,
+	{
+		userId: explicitUserId,
+		enabled = true,
+		heartbeatMs = 15_000,
+	}: UsePresenceOptions = {},
+): Record<string, PresenceStatus> => {
+	const { bame, userId: contextUserId } = useBame();
+	const userId = explicitUserId ?? contextUserId;
+	const [entries, setEntries] = useState<Record<string, PresenceEntry>>({});
+	const [localStatus, setLocalStatus] = useState<PresenceStatus>(
+		currentWindowPresence,
+	);
+
+	useEffect(() => {
+		if (!enabled || !scope || !userId || !bame.presence) {
+			setEntries({});
+			return;
+		}
+		let cancelled = false;
+		const presence = bame.presence;
+		const mergeEntries = (incoming: Record<string, PresenceEntry>) => {
+			if (cancelled) return;
+			setEntries((prev) => {
+				const next = { ...prev };
+				for (const [id, entry] of Object.entries(incoming)) {
+					const existing = next[id];
+					if (!existing || entry.updatedAt >= existing.updatedAt) {
+						next[id] = entry;
+					}
+				}
+				return next;
+			});
+		};
+		const pushStatus = (status: PresenceStatus) => {
+			if (cancelled) return;
+			setLocalStatus(status);
+			void presence
+				.report({ scope, userId, status })
+				.then((snap) => mergeEntries(snap.entries))
+				.catch(() => {});
+		};
+		const syncSnapshot = () => {
+			void presence
+				.get(scope, userId)
+				.then((snap) => mergeEntries(snap.entries))
+				.catch(() => {});
+		};
+
+		const unsub = presence.subscribe(
+			scope,
+			(snap) => mergeEntries(snap.entries),
+			{
+				userId,
+				onReady: () => {
+					syncSnapshot();
+					pushStatus(currentWindowPresence());
+				},
+			},
+		);
+
+		pushStatus(currentWindowPresence());
+		syncSnapshot();
+
+		const onVisibility = () => pushStatus(currentWindowPresence());
+		const onPageHide = () => {
+			void presence
+				.report({ scope, userId, status: 'offline' })
+				.catch(() => {});
+		};
+		if (typeof document !== 'undefined') {
+			document.addEventListener('visibilitychange', onVisibility);
+		}
+		if (typeof window !== 'undefined') {
+			window.addEventListener('focus', onVisibility);
+			window.addEventListener('blur', onVisibility);
+			window.addEventListener('pagehide', onPageHide);
+		}
+
+		const heartbeat = setInterval(() => {
+			pushStatus(currentWindowPresence());
+			const now = Date.now();
+			setEntries((prev) => {
+				let changed = false;
+				const next = { ...prev };
+				for (const [id, entry] of Object.entries(prev)) {
+					if (entry.status !== 'offline' && entry.expiresAt <= now) {
+						next[id] = {
+							...entry,
+							status: 'offline',
+							updatedAt: entry.expiresAt,
+						};
+						changed = true;
+					}
+				}
+				return changed ? next : prev;
+			});
+		}, heartbeatMs);
+
+		return () => {
+			cancelled = true;
+			clearInterval(heartbeat);
+			unsub();
+			if (typeof document !== 'undefined') {
+				document.removeEventListener('visibilitychange', onVisibility);
+			}
+			if (typeof window !== 'undefined') {
+				window.removeEventListener('focus', onVisibility);
+				window.removeEventListener('blur', onVisibility);
+				window.removeEventListener('pagehide', onPageHide);
+			}
+			void presence
+				.report({ scope, userId, status: 'offline' })
+				.catch(() => {});
+		};
+	}, [bame, scope, userId, enabled, heartbeatMs]);
+
+	return useMemo(() => {
+		if (!enabled || !scope || !userId) return {};
+		const now = Date.now();
+		const map: Record<string, PresenceStatus> = {};
+		for (const [id, entry] of Object.entries(entries)) {
+			map[id] =
+				entry.status !== 'offline' && entry.expiresAt <= now
+					? 'offline'
+					: entry.status;
+		}
+		map[userId] = localStatus;
+		return map;
+	}, [enabled, scope, userId, entries, localStatus]);
 };

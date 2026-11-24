@@ -8,6 +8,7 @@ import {
 import { bestEffort, type ErrorReporter } from './errors.js';
 import { createLobbiesService } from './lobbies.js';
 import { type BameHooks, createMatchesService } from './matches.js';
+import { createPresenceService } from './presence.js';
 import { createProfilesService } from './profiles.js';
 
 export interface CreateBameOptions {
@@ -45,6 +46,7 @@ export const createBame = (options: CreateBameOptions) => {
 			),
 	};
 	const profiles = createProfilesService(storage, realtime, options.onError);
+	const presence = createPresenceService(realtime, options.onError);
 
 	return {
 		games: gameMap,
@@ -52,6 +54,7 @@ export const createBame = (options: CreateBameOptions) => {
 		storage,
 		realtime,
 		profiles,
+		presence,
 		lobbies: createLobbiesService(gameMap, storage, realtime),
 		matches: createMatchesService(
 			gameMap,
@@ -85,4 +88,5 @@ export interface BameRuntime {
 		BameInstance['profiles'],
 		'ensure' | 'get' | 'list' | 'update' | 'subscribe'
 	>;
+	presence: BameInstance['presence'];
 }

@@ -1,6 +1,8 @@
 import { requestScope } from './request-scope.js';
 import { BameTransportError } from './transport-error.js';
+
 export { BameTransportError } from './transport-error.js';
+
 import { BameError } from '../engine/errors.js';
 import type {
 	GameNotification,
@@ -14,9 +16,8 @@ import { bestEffort } from './errors.js';
 import {
 	type BameInstance,
 	type BameRuntime,
-	type CreateLobbyInput,
 	type CloseLobbyInput,
-	type RematchLobbyInput,
+	type CreateLobbyInput,
 	type JoinLobbyByCodeInput,
 	type JoinLobbyInput,
 	type KickLobbyInput,
@@ -28,8 +29,13 @@ import {
 	type MatchActionInput,
 	type MoveInput,
 	matchPlayerChannel,
+	type PresenceSnapshot,
+	type PresenceStatus,
 	type Profile,
+	presenceChannel,
 	profileChannel,
+	type RematchLobbyInput,
+	type ReportPresenceInput,
 	type SetReadyInput,
 	type StartLobbyInput,
 	type UpdateProfileInput,
@@ -69,6 +75,16 @@ export type RpcAction =
 	| { service: 'matches'; method: 'move'; args: [MoveInput] }
 	| { service: 'matches'; method: 'undo'; args: [MatchActionInput] }
 	| { service: 'matches'; method: 'forfeit'; args: [MatchActionInput] }
+	| {
+			service: 'presence';
+			method: 'report';
+			args: [ReportPresenceInput];
+	  }
+	| {
+			service: 'presence';
+			method: 'get';
+			args: [scope: string, userId?: string];
+	  }
 	| {
 			service: 'profiles';
 			method: 'ensure';
@@ -131,6 +147,8 @@ const lobbyView = (l: Lobby | null) =>
 			}
 		: null;
 
+const presenceStreamsByBame = new WeakMap<BameInstance, Map<string, number>>();
+
 export const createBameHandler = (
 	bame: BameInstance,
 	options: CreateBameHandlerOptions = {},
@@ -164,6 +182,11 @@ export const createBameHandler = (
 			fail(403, 'FORBIDDEN', 'Forbidden: cannot impersonate another player');
 		return user as string;
 	};
+	let activePresenceStreams = presenceStreamsByBame.get(bame);
+	if (!activePresenceStreams) {
+		activePresenceStreams = new Map<string, number>();
+		presenceStreamsByBame.set(bame, activePresenceStreams);
+	}
 	const authorizeMatch = async (
 		req: Request,
 		id: string,
@@ -175,6 +198,36 @@ export const createBameHandler = (
 		if (await options.canSpectate?.({ request: req, userId: user, match }))
 			return null;
 		return fail(403, 'FORBIDDEN', 'Forbidden: match membership required');
+	};
+	const authorizePresenceScope = async (
+		req: Request,
+		scope: string,
+		claimedUser?: string | null,
+	) => {
+		const user = (await identity(req, claimedUser, true)) as string;
+		const colon = scope.indexOf(':');
+		const kind = scope.slice(0, colon);
+		let resource: string;
+		try {
+			resource = decodeURIComponent(scope.slice(colon + 1));
+		} catch {
+			return fail(400, 'INVALID_CHANNEL', 'Invalid presence scope');
+		}
+		if (kind === 'match') {
+			const match = await bame.storage.get<Match>('matches', resource);
+			if (!match) return fail(404, 'NOT_FOUND', 'Match not found');
+			if (!match.players.some((p) => p.id === user))
+				fail(403, 'FORBIDDEN', 'Forbidden: match membership required');
+			return user;
+		}
+		if (kind === 'lobby') {
+			const lobby = await bame.storage.get<Lobby>('lobbies', resource);
+			if (!lobby) return fail(404, 'NOT_FOUND', 'Lobby not found');
+			if (!lobby.members.some((m) => m.userId === user))
+				fail(403, 'FORBIDDEN', 'Forbidden: lobby membership required');
+			return user;
+		}
+		return fail(400, 'INVALID_CHANNEL', 'Unknown presence scope');
 	};
 	const dispatch = async (
 		req: Request,
@@ -257,6 +310,19 @@ export const createBameHandler = (
 			if (action.method === 'undo') return bame.matches.undo(trusted);
 			return bame.matches.forfeit(trusted);
 		}
+		if (action.service === 'presence') {
+			if (action.method === 'get') {
+				await authorizePresenceScope(req, action.args[0], action.args[1]);
+				return bame.presence.get(action.args[0]);
+			}
+			const input = action.args[0];
+			const user = await authorizePresenceScope(req, input.scope, input.userId);
+			return bame.presence.report({
+				scope: input.scope,
+				userId: user,
+				status: input.status as PresenceStatus,
+			});
+		}
 		if (action.method === 'list')
 			return (await bame.profiles.list()).map(profileView);
 		if (action.method === 'get')
@@ -319,8 +385,9 @@ export const createBameHandler = (
 		const match = /^match:([^:]+):player:([^:]+)$/.exec(channel),
 			lobby = /^lobby:([^:]+)$/.exec(channel),
 			profile = /^profile:([^:]+)$/.exec(channel),
-			notification = /^user:([^:]+):notifications$/.exec(channel);
-		if (!match && !lobby && !profile && !notification)
+			notification = /^user:([^:]+):notifications$/.exec(channel),
+			presence = /^presence:((?:match|lobby):[^:]+)$/.exec(channel);
+		if (!match && !lobby && !profile && !notification && !presence)
 			fail(400, 'INVALID_CHANNEL', 'Unknown subscription channel');
 		const decode = (value: string) => {
 			try {
@@ -337,7 +404,19 @@ export const createBameHandler = (
 		const resource = decode(
 			(match ?? lobby ?? profile ?? notification)?.[1] ?? '',
 		);
+		const presenceScope = presence ? presence[1] : undefined;
+		let presenceUserId: string | undefined;
 		const authorize = async () => {
+			if (presenceScope) {
+				presenceUserId = await authorizePresenceScope(
+					req,
+					presenceScope,
+					options.unsafeTrustClientIds
+						? url.searchParams.get('userId')
+						: undefined,
+				);
+				return;
+			}
 			const user = await identity(
 				req,
 				owner ??
@@ -363,20 +442,32 @@ export const createBameHandler = (
 		};
 		await authorize();
 		const snapshot = async () =>
-			match
-				? await bame.matches.get(resource, owner)
-				: lobby
-					? lobbyView(
-							await bame.lobbies.get(
-								resource,
-								options.unsafeTrustClientIds
-									? (url.searchParams.get('userId') ?? undefined)
-									: ((await options.getUserId?.(req)) ?? undefined),
-							),
-						)
-					: profile
-						? profileView(await bame.profiles.get(resource))
-						: undefined;
+			presenceScope
+				? await bame.presence.get(presenceScope)
+				: match
+					? await bame.matches.get(resource, owner)
+					: lobby
+						? lobbyView(
+								await bame.lobbies.get(
+									resource,
+									options.unsafeTrustClientIds
+										? (url.searchParams.get('userId') ?? undefined)
+										: ((await options.getUserId?.(req)) ?? undefined),
+								),
+							)
+						: profile
+							? profileView(await bame.profiles.get(resource))
+							: undefined;
+		const presenceStreamKey =
+			presenceScope && presenceUserId
+				? `${presenceScope}::${presenceUserId}`
+				: undefined;
+		if (presenceStreamKey) {
+			activePresenceStreams.set(
+				presenceStreamKey,
+				(activePresenceStreams.get(presenceStreamKey) ?? 0) + 1,
+			);
+		}
 		let unsub: Unsubscribe = () => {};
 		let closed = false;
 		let timer: ReturnType<typeof setInterval> | undefined;
@@ -401,6 +492,20 @@ export const createBameHandler = (
 					unsub();
 					clearInterval(timer);
 					req.signal.removeEventListener('abort', dispose);
+					if (presenceStreamKey && presenceScope && presenceUserId) {
+						const remaining =
+							(activePresenceStreams.get(presenceStreamKey) ?? 1) - 1;
+						if (remaining <= 0) {
+							activePresenceStreams.delete(presenceStreamKey);
+							void bame.presence.report({
+								scope: presenceScope,
+								userId: presenceUserId,
+								status: 'offline',
+							});
+						} else {
+							activePresenceStreams.set(presenceStreamKey, remaining);
+						}
+					}
 					try {
 						controller.close();
 					} catch {}
@@ -419,8 +524,9 @@ export const createBameHandler = (
 						.then(async () => {
 							if (closed) return;
 							await authorize();
-							if (notification) {
+							if (notification || presenceScope) {
 								if (payload) send(payload);
+								else if (presenceScope) send(await snapshot());
 							} else {
 								const current = await snapshot();
 								if (match) {
@@ -1023,6 +1129,31 @@ export const createBameClient = (
 			) =>
 				subscribeChannel<Profile>(
 					profileChannel(userId),
+					callback,
+					subscription,
+				),
+		},
+
+		presence: {
+			report: (input: ReportPresenceInput) =>
+				rpc<PresenceSnapshot>({
+					service: 'presence',
+					method: 'report',
+					args: [input],
+				}),
+			get: (scope: string, userId?: string) =>
+				rpc<PresenceSnapshot>({
+					service: 'presence',
+					method: 'get',
+					args: [scope, userId],
+				}),
+			subscribe: (
+				scope: string,
+				callback: (snapshot: PresenceSnapshot) => void | Promise<void>,
+				subscription?: SubscriptionOptions,
+			) =>
+				subscribeChannel<PresenceSnapshot>(
+					presenceChannel(scope),
 					callback,
 					subscription,
 				),

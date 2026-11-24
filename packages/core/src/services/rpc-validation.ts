@@ -32,6 +32,14 @@ const id = (value: unknown, optional = false) => {
 	if (optional && (value === undefined || value === null)) return;
 	if (!identifier(value)) invalid('Invalid identifier');
 };
+const presenceScope = (value: unknown) => {
+	if (
+		typeof value !== 'string' ||
+		value.length > 300 ||
+		!/^(match|lobby):[^/:]+$/.test(value)
+	)
+		invalid('Invalid presence scope');
+};
 const bool = (value: unknown) => {
 	if (value !== undefined && typeof value !== 'boolean')
 		invalid('Expected boolean');
@@ -141,6 +149,19 @@ export function validateRpc(value: unknown): RpcAction {
 					invalid('Move args must be an array');
 			}
 		} else invalid('Unknown match method');
+	} else if (rpc.service === 'presence') {
+		if (method === 'get') {
+			arity(1, 2);
+			presenceScope(args[0]);
+			id(args[1], true);
+		} else if (method === 'report') {
+			arity(1);
+			const input = fields(args[0], ['scope', 'userId', 'status']);
+			presenceScope(input.scope);
+			id(input.userId, true);
+			if (!['online', 'away', 'offline'].includes(input.status as string))
+				invalid('Invalid presence status');
+		} else invalid('Unknown presence method');
 	} else if (rpc.service === 'profiles') {
 		if (method === 'list') arity(0);
 		else if (method === 'get') {
