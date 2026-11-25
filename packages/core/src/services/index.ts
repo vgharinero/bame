@@ -3,5 +3,6 @@ export * from './errors.js';
 export * from './lobbies.js';
 export * from './matches.js';
 export * from './network.js';
+export * from './notifications.js';
 export * from './presence.js';
 export * from './profiles.js';

@@ -2,7 +2,8 @@
 
 **Play Mode:** Online Authoritative Server Multiplayer (Multi-Terminal)  
 **UI Adapter:** [`@bame/ui-console`](../../packages/ui/console) (`mode: 'online'`)  
-**Storage / Server Adapter:** [`@bame/storage-local`](../../packages/storage/local) (`localFileStorage` + `listenBameServer`)
+**Server Adapter:** [`@bame/server-node`](../../packages/server/node) (`listenBameServer`)  
+**Storage Adapter:** [`@bame/storage-local`](../../packages/storage/local) (`localFileStorage`)
 
 A playable multi-terminal card game demonstrating **authoritative online multiplayer** where each player holds a **secret card** that their opponent cannot see until both players reveal.
 
@@ -45,5 +46,5 @@ Enter your name (e.g. `bob`) and choose **3) Join Lobby** (either by selecting t
 ## Code Structure
 
 - **[`src/game.ts`](./src/game.ts)** — Pure game definition (`setup`, `redraw`, `reveal`, `view`, `endIf`). Notice how `view` filters `state.cards` so a player only sees their own card until `state.revealed[opponentId]` is `true`.
-- **[`src/server.ts`](./src/server.ts)** — Starts the authoritative Node HTTP server using `listenBameServer` and `localFileStorage` from `@bame/storage-local`.
+- **[`src/server.ts`](./src/server.ts)** — Starts the authoritative Node HTTP server using `listenBameServer` from `@bame/server-node` and `localFileStorage` from `@bame/storage-local`.
 - **[`src/play.ts`](./src/play.ts)** — Connects to the server with `createBameClient` and runs `runConsoleGame` in `mode: 'online'`.

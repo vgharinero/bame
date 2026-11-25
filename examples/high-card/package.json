@@ -12,6 +12,7 @@
 	},
 	"dependencies": {
 		"@bame/core": "workspace:*",
+		"@bame/server-node": "workspace:*",
 		"@bame/storage-local": "workspace:*",
 		"@bame/ui-console": "workspace:*"
 	},

@@ -65,6 +65,23 @@ export const bame = createBame({
 
 ---
 
+## 3. Verified Bearer Token Authentication (`createSupabaseUserResolver`)
+
+Use `createSupabaseUserResolver(supabase)` as `getUserId` in `createBameHandler` to authenticate `Authorization: Bearer <jwt>` headers and block player impersonation:
+
+```ts
+import { createBameHandler } from '@bame/core';
+import { createSupabaseUserResolver } from '@bame/storage-supabase';
+
+export const { GET, POST } = createBameHandler(bame, {
+	getUserId: createSupabaseUserResolver(supabase),
+});
+```
+
+`extractBearerToken(request)` is also exported if you need the raw token.
+
+---
+
 ## License
 
 [MIT](../../LICENSE)

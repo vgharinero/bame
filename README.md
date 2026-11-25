@@ -10,7 +10,7 @@ Define your game's state, moves, secret views, and win conditions using pure Typ
 
 - **Pure, Readable Game Logic:** Write `setup`, `moves`, `view`, and `endIf` as regular top-level TypeScript functions and pass them to `defineGame({ ... })`.
 - **Zero Dependencies in `@bame/core`:** Works anywhere standard Web APIs exist—Browsers, Node.js, Next.js App Router, Cloudflare Workers, Bun, and Deno.
-- **Pay Only for What You Use:** Install only `@bame/core` and bring your own UI/storage, or pick from official **UI adapters** (`@bame/ui-console`, `@bame/ui-react`) and **Storage adapters** (`@bame/storage-local`, `@bame/storage-supabase`, `@bame/storage-firestore`).
+- **Pay Only for What You Use:** Install only `@bame/core` and bring your own UI/storage, or pick from official **UI adapters** (`@bame/ui-console`, `@bame/ui-react`), **Storage adapters** (`@bame/storage-local`, `@bame/storage-supabase`, `@bame/storage-firestore`), and **Server adapters** (`@bame/server-node`, `@bame/server-vite`).
 - **True Hidden Information & Anti-Cheat:** Run an authoritative server in one line with `createBameHandler(bame)` or `listenBameServer(bame)` so secret cards, hidden moves, and the RNG seed never leave the server.
 - **All 6 Combinations Supported Out of the Box:**
   - **Singleplayer** (`players: 1`)
@@ -42,9 +42,13 @@ pnpm add @bame/ui-console   # Interactive terminal runner
 pnpm add @bame/ui-react     # React Provider, hooks & customizable UI components
 
 # Optional Storage adapters
-pnpm add @bame/storage-local      # Local JSON file persistence + standalone Node HTTP server
+pnpm add @bame/storage-local      # Local JSON file persistence
 pnpm add @bame/storage-supabase   # Supabase Postgres + Realtime adapter
 pnpm add @bame/storage-firestore  # Firebase Firestore transactional adapter
+
+# Optional Server / Host adapters (for non-Fetch hosts)
+pnpm add @bame/server-node        # Node HTTP/Connect bridge + standalone server
+pnpm add @bame/server-vite        # Vite dev & preview plugin for /api/bame
 ```
 
 ---
@@ -101,9 +105,12 @@ packages/
     console/              -> @bame/ui-console         (runConsoleGame for local & online terminal play)
     react/                -> @bame/ui-react           (BameProvider, hooks & customizable UI components)
   storage/
-    local/                -> @bame/storage-local      (localFileStorage + listenBameServer)
-    supabase/             -> @bame/storage-supabase   (supabaseStorage + supabaseRealtime)
+    local/                -> @bame/storage-local      (localFileStorage)
+    supabase/             -> @bame/storage-supabase   (supabaseStorage, supabaseRealtime, createSupabaseUserResolver)
     firestore/            -> @bame/storage-firestore  (firestoreStorage)
+  server/
+    node/                 -> @bame/server-node        (createBameNodeHandler + listenBameServer)
+    vite/                 -> @bame/server-vite        (bameVitePlugin for Vite dev & preview)
 ```
 
 | Package | Description | Docs |
@@ -111,10 +118,12 @@ packages/
 | [`@bame/core`](./packages/core) | Zero-dependency game engine (`defineGame`, `createBame`, `createBameHandler`, `createBameClient`, `simulate`) | [README](./packages/core/README.md) |
 | [`@bame/cli`](./packages/cli) | Project scaffolder (`bame init <name> --template console \| react`) | [README](./packages/cli/README.md) |
 | [`@bame/ui-console`](./packages/ui/console) | Terminal UI runner (`runConsoleGame` with `mode: 'local' \| 'online'`) | [README](./packages/ui/console/README.md) |
-| [`@bame/ui-react`](./packages/ui/react) | React hooks (`useLocalMatch`, `useMatch`, `useLobby`) & customizable UI (`LobbyGate`, `PlayerStats`, `SeatSwitcher`, `MatchResult`) | [README](./packages/ui/react/README.md) |
-| [`@bame/storage-local`](./packages/storage/local) | Local JSON file storage (`localFileStorage`) & Node HTTP server (`listenBameServer`) | [README](./packages/storage/local/README.md) |
-| [`@bame/storage-supabase`](./packages/storage/supabase) | Supabase Postgres + Realtime adapter with optimistic concurrency | [README](./packages/storage/supabase/README.md) |
+| [`@bame/ui-react`](./packages/ui/react) | React hooks (`useLocalMatch`, `useMatch`, `useLobby`, `useLobbySession`, `useProfiles`) & customizable UI (`LobbyGate`, `PlayerStats`, `SeatSwitcher`, `MatchResult`) | [README](./packages/ui/react/README.md) |
+| [`@bame/storage-local`](./packages/storage/local) | Local JSON file storage (`localFileStorage` with optional `reuseInProcess`) | [README](./packages/storage/local/README.md) |
+| [`@bame/storage-supabase`](./packages/storage/supabase) | Supabase Postgres + Realtime adapter + bearer auth resolver | [README](./packages/storage/supabase/README.md) |
 | [`@bame/storage-firestore`](./packages/storage/firestore) | Firebase Firestore transactional storage adapter | [README](./packages/storage/firestore/README.md) |
+| [`@bame/server-node`](./packages/server/node) | Node.js `http` / Connect bridge (`createBameNodeHandler`) & standalone server (`listenBameServer`) | [README](./packages/server/node/README.md) |
+| [`@bame/server-vite`](./packages/server/vite) | Vite dev & preview middleware plugin (`bameVitePlugin`) | [README](./packages/server/vite/README.md) |
 
 ---
 

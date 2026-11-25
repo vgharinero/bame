@@ -1,5 +1,5 @@
-import http from 'node:http';
 import { once } from 'node:events';
+import http from 'node:http';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createBameNodeHandler } from './node-handler.js';
 
@@ -173,4 +173,37 @@ it('reports a failed producer even when pipeline cleanup closes the response soc
 		expect.objectContaining({ message: 'Producer failed' }),
 		{ operation: 'http.node' },
 	);
+});
+
+it('resolves forwarded HTTPS proxy URLs only when trustProxy is enabled', async () => {
+	const seen: string[] = [];
+	const direct = await serve((request) => {
+		seen.push(request.url);
+		return Response.json({ url: request.url });
+	});
+	await fetch(`${direct}/api/bame`, {
+		headers: {
+			'x-forwarded-proto': 'https',
+			'x-forwarded-host': 'proxy.example',
+		},
+	});
+	expect(seen[0]).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/api\/bame$/);
+
+	const proxied = await serve(
+		(request) => Response.json({ url: request.url }),
+		{ trustProxy: true },
+	);
+	const ok = await fetch(`${proxied}/api/bame?x=1`, {
+		headers: {
+			'x-forwarded-proto': 'https, http',
+			'x-forwarded-host': 'proxy.example:8443, internal.local',
+		},
+	});
+	expect(await ok.json()).toEqual({
+		url: 'https://proxy.example:8443/api/bame?x=1',
+	});
+	const invalid = await fetch(`${proxied}/api/bame`, {
+		headers: { 'x-forwarded-host': 'bad host/path' },
+	});
+	expect(invalid.status).toBe(400);
 });

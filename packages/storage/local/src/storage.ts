@@ -10,17 +10,32 @@ import {
 
 export interface LocalFileStorageOptions {
 	file: string;
+	/**
+	 * Reuse the active writer in the current process for the same resolved path
+	 * (useful across Vite/SSR module reloads).
+	 */
+	reuseInProcess?: boolean;
 }
 
 export interface LocalFileStorage extends Storage {
 	close(): Promise<void>;
 }
 
+const registryKey = Symbol.for('bame.storage-local.instances');
+const registryState = globalThis as typeof globalThis & {
+	[registryKey]?: Map<string, LocalFileStorage>;
+};
+
 /** Single writer. Close before reopening; stale PID locks are recovered on restart. */
 export const localFileStorage = (
 	options: LocalFileStorageOptions,
 ): LocalFileStorage => {
 	const file = path.resolve(options.file);
+	const stores = options.reuseInProcess
+		? (registryState[registryKey] ??= new Map())
+		: undefined;
+	const existing = stores?.get(file);
+	if (existing) return existing;
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	const lock = `${file}.lock`;
 	if (fs.existsSync(lock)) {
@@ -102,7 +117,7 @@ export const localFileStorage = (
 		queue = task.catch(() => {});
 		return task;
 	};
-	return {
+	const instance: LocalFileStorage = {
 		commit,
 		get: (collection, id) => store.get(collection, id),
 		find: (collection, where) => store.find(collection, where),
@@ -120,6 +135,9 @@ export const localFileStorage = (
 			closed = true;
 			await queue;
 			release();
+			if (stores?.get(file) === instance) stores.delete(file);
 		},
 	};
+	stores?.set(file, instance);
+	return instance;
 };

@@ -139,6 +139,47 @@ const {
 } = useLobby();
 ```
 
+### `useLobbySession(initialLobby, options)` & Reload Helpers
+Headless online lobby session controller managing waiting-room $\leftrightarrow$ match transitions, rematch resets, host close vs guest leave, and kicked/removed detection—alongside `resumeLobby`, `readStoredLobbyId`, `writeStoredLobbyId`, and `clearStoredLobbyId` for tab reload recovery:
+
+```tsx
+const {
+	lobby,
+	view,          // { screen: 'lobby' } | { screen: 'game'; matchId: string }
+	canStart,
+	acting,
+	errorDetails,
+	startMatch,
+	leaveOrClose,
+	kickPlayer,
+	prepareRematch,
+	returnToLobby,
+	resumeMatch,
+} = useLobbySession(initialLobby, {
+	onClose: (reason) => {
+		// reason: 'closed' | 'left' | 'removed'
+	},
+});
+```
+
+### `useProfiles(userIds, options?)`
+Fetches and periodically refreshes profiles for a roster of user IDs without opening per-player SSE streams, keeping monotonic versions and retaining cached metadata on transient failures:
+
+```tsx
+const profiles = useProfiles(lobby.members.map((m) => m.userId), {
+	pollIntervalMs: 5000,
+});
+```
+
+### `usePresence(scope, options?)`
+Subscribes to live `'online' | 'away' | 'offline'` presence for a lobby or match scope. Pass `playerIds` to pre-populate absent members as `'offline'`:
+
+```tsx
+const presence = usePresence(matchPresenceScope(matchId), {
+	playerIds: state?.order,
+});
+```
+
 ### `useMatchesList(filter?)`
 Fetches a player's active or finished matches (ideal for multi-day async game dashboards):
 

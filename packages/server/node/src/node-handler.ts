@@ -8,6 +8,31 @@ export interface BameNodeHandlerOptions {
 	path?: string;
 	maxBodyBytes?: number;
 	onError?: ErrorReporter;
+	trustProxy?: boolean;
+}
+
+function firstHeaderValue(
+	value: string | string[] | undefined,
+): string | undefined {
+	const raw = Array.isArray(value) ? value[0] : value;
+	const first = raw?.split(',')[0]?.trim();
+	return first || undefined;
+}
+
+function resolveRequestUrl(req: IncomingMessage, trustProxy: boolean): URL {
+	let protocol = 'http';
+	let host = req.headers.host ?? 'localhost';
+	if (trustProxy) {
+		const forwardedProto = firstHeaderValue(
+			req.headers['x-forwarded-proto'],
+		)?.toLowerCase();
+		if (forwardedProto === 'http' || forwardedProto === 'https') {
+			protocol = forwardedProto;
+		}
+		const forwardedHost = firstHeaderValue(req.headers['x-forwarded-host']);
+		if (forwardedHost) host = forwardedHost;
+	}
+	return new URL(req.url ?? '/', `${protocol}://${host}`);
 }
 
 /** Node/Connect bridge with bounded bodies, backpressure, and disconnect cleanup. */
@@ -32,10 +57,14 @@ export function createBameNodeHandler(
 		res.once('close', disconnect);
 		req.once('aborted', disconnect);
 		try {
-			const url = new URL(
-				req.url ?? '/',
-				`http://${req.headers.host ?? 'localhost'}`,
-			);
+			let url: URL;
+			try {
+				url = resolveRequestUrl(req, Boolean(options.trustProxy));
+			} catch {
+				res.writeHead(400);
+				res.end();
+				return;
+			}
 			if (url.pathname !== basePath) {
 				if (next) next();
 				else {

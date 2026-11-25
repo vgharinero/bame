@@ -1,5 +1,6 @@
 import { createBame } from '@bame/core';
-import { listenBameServer, localFileStorage } from '@bame/storage-local';
+import { listenBameServer } from '@bame/server-node';
+import { localFileStorage } from '@bame/storage-local';
 import { highCard } from './game';
 
 const PORT = Number(process.env.PORT ?? 4100);

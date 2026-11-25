@@ -50,6 +50,9 @@ importers:
       '@bame/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@bame/server-node':
+        specifier: workspace:*
+        version: link:../../packages/server/node
       '@bame/storage-local':
         specifier: workspace:*
         version: link:../../packages/storage/local
@@ -192,6 +195,29 @@ importers:
         version: 22.20.5
 
   packages/core: {}
+
+  packages/server/node:
+    dependencies:
+      '@bame/core':
+        specifier: workspace:*
+        version: link:../../core
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
+
+  packages/server/vite:
+    dependencies:
+      '@bame/server-node':
+        specifier: workspace:*
+        version: link:../node
+      vite:
+        specifier: '>=5'
+        version: 8.3.5(@types/node@22.20.5)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.5
 
   packages/storage/firestore:
     dependencies:

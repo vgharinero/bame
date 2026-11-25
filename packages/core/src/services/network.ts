@@ -100,6 +100,22 @@ export type RpcAction =
 			args: [userId: string, updates: UpdateProfileInput];
 	  };
 
+export type AllowedOriginsOption =
+	| readonly string[]
+	| ((origin: string, request: Request) => boolean | Promise<boolean>);
+
+export async function isOriginPermitted(
+	request: Request,
+	allowedOrigins?: AllowedOriginsOption,
+): Promise<boolean> {
+	const origin = request.headers.get('origin');
+	if (!origin || origin === new URL(request.url).origin) return true;
+	if (!allowedOrigins) return false;
+	if (typeof allowedOrigins === 'function')
+		return Boolean(await allowedOrigins(origin, request));
+	return allowedOrigins.includes(origin);
+}
+
 export interface CreateBameHandlerOptions {
 	getUserId?: (req: Request) => string | null | Promise<string | null>;
 	unsafeTrustClientIds?: true;
@@ -109,7 +125,7 @@ export interface CreateBameHandlerOptions {
 		match: Match;
 	}) => boolean | Promise<boolean>;
 	maxBodyBytes?: number;
-	allowedOrigins?: readonly string[];
+	allowedOrigins?: AllowedOriginsOption;
 }
 export interface BameServerHandlers {
 	fetch: (req: Request) => Promise<Response>;
@@ -676,11 +692,7 @@ export const createBameHandler = (
 	};
 	const fetch = async (req: Request): Promise<Response> => {
 		const origin = req.headers.get('origin');
-		const permitted =
-			!origin ||
-			origin === new URL(req.url).origin ||
-			options.allowedOrigins?.includes(origin);
-		if (!permitted)
+		if (!(await isOriginPermitted(req, options.allowedOrigins)))
 			return Response.json(
 				{ ok: false, error: 'Origin not allowed', code: 'FORBIDDEN' },
 				{ status: 403 },

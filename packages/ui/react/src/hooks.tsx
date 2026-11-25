@@ -35,6 +35,78 @@ import {
 	useState,
 } from 'react';
 
+const TERMINAL_RESUME_ERRORS = new Set([
+	'FORBIDDEN',
+	'LOBBY_CLOSED',
+	'LOBBY_NOT_FOUND',
+	'NOT_A_MEMBER',
+	'NOT_FOUND',
+	'UNAUTHORIZED',
+]);
+
+export function readStoredLobbyId(
+	storageKey = 'bame:onlineLobby',
+	getStorage: () => Pick<Storage, 'getItem'> = () => sessionStorage,
+): string | null {
+	try {
+		const raw = getStorage().getItem(storageKey)?.trim();
+		return raw ? raw : null;
+	} catch {
+		return null;
+	}
+}
+
+export function writeStoredLobbyId(
+	lobbyId: string,
+	storageKey = 'bame:onlineLobby',
+	getStorage: () => Pick<Storage, 'setItem'> = () => sessionStorage,
+): void {
+	try {
+		getStorage().setItem(storageKey, lobbyId);
+	} catch {
+		// Persistence is optional; in-memory session remains active.
+	}
+}
+
+export function clearStoredLobbyId(
+	storageKey = 'bame:onlineLobby',
+	getStorage: () => Pick<Storage, 'removeItem'> = () => sessionStorage,
+): void {
+	try {
+		getStorage().removeItem(storageKey);
+	} catch {
+		// Persistence is optional.
+	}
+}
+
+/** Rejoin an active lobby on reload unless closed, unjoined, or rejected terminally. */
+export async function resumeLobby<TConfig = unknown>(
+	bame: BameRuntime,
+	lobbyId: string,
+	userId: string,
+	signal?: AbortSignal,
+): Promise<Lobby<TConfig> | null> {
+	const runtime =
+		signal && 'withOptions' in bame && typeof bame.withOptions === 'function'
+			? (bame as BameClientRuntime).withOptions({ signal })
+			: bame;
+	try {
+		const lobby = await runtime.lobbies.get<TConfig>(lobbyId, userId);
+		if (
+			!lobby ||
+			lobby.status === 'closed' ||
+			!lobby.members.some((member) => member.userId === userId)
+		) {
+			return null;
+		}
+		return lobby;
+	} catch (error) {
+		const code = getErrorDetails(error)?.code;
+		if (code && TERMINAL_RESUME_ERRORS.has(code)) return null;
+		throw error;
+	}
+}
+
 /** Keep the legacy message and structured details in one state update. */
 function useErrorState() {
 	const [failure, setFailure] = useState<{
@@ -610,6 +682,178 @@ export const useLobby = <TConfig = unknown>(
 		close,
 		rematch,
 		reset,
+	};
+};
+
+export type LobbySessionScreen =
+	| { screen: 'lobby' }
+	| { screen: 'game'; matchId: string };
+
+export interface UseLobbySessionOptions {
+	userId?: string;
+	pollIntervalMs?: number | false;
+	onClose: (reason: 'closed' | 'left' | 'removed') => void;
+	onMatchEntered?: (matchId: string) => void;
+}
+
+/**
+ * Headless online lobby session controller handling waiting-room <-> match
+ * screen transitions, rematch resets, and kicked/closed room detection.
+ */
+export const useLobbySession = <TConfig = unknown>(
+	initialLobby: Lobby<TConfig>,
+	{
+		userId: explicitUserId,
+		pollIntervalMs = 2000,
+		onClose,
+		onMatchEntered,
+	}: UseLobbySessionOptions,
+) => {
+	const { userId: contextUserId } = useBame();
+	const userId = explicitUserId ?? contextUserId;
+	const [view, setView] = useState<LobbySessionScreen>(() =>
+		initialLobby.status === 'started' && initialLobby.matchId
+			? { screen: 'game', matchId: initialLobby.matchId }
+			: { screen: 'lobby' },
+	);
+	const {
+		lobby: current,
+		loading,
+		error,
+		errorDetails,
+		setReady,
+		start,
+		leave,
+		kick,
+		close,
+		rematch,
+		acting,
+		canStart,
+		isHost,
+		isReady,
+	} = useLobby<TConfig>(initialLobby.id, {
+		initialLobby,
+		pollIntervalMs,
+		subscribe: view.screen === 'lobby',
+	});
+	const lobby = current ?? initialLobby;
+	const enteredMatchRef = useRef<string | null>(
+		initialLobby.status === 'started' && initialLobby.matchId
+			? initialLobby.matchId
+			: null,
+	);
+	const leavingRef = useRef(false);
+	const closeNotifiedRef = useRef(false);
+	const mountedRef = useRef(false);
+	const onCloseRef = useRef(onClose);
+	const onMatchEnteredRef = useRef(onMatchEntered);
+	onCloseRef.current = onClose;
+	onMatchEnteredRef.current = onMatchEntered;
+
+	useEffect(() => {
+		mountedRef.current = true;
+		return () => {
+			mountedRef.current = false;
+		};
+	}, []);
+
+	useEffect(() => {
+		if (loading) return;
+		const removedFromLobby = Boolean(
+			current &&
+				current.status !== 'closed' &&
+				!current.members.some((member) => member.userId === userId),
+		);
+		const forbiddenPoll =
+			errorDetails?.code === 'FORBIDDEN' ||
+			errorDetails?.code === 'NOT_A_MEMBER';
+		if (removedFromLobby || forbiddenPoll) {
+			if (!leavingRef.current && !closeNotifiedRef.current) {
+				closeNotifiedRef.current = true;
+				onCloseRef.current('removed');
+			}
+			return;
+		}
+		if ((!current && !errorDetails) || current?.status === 'closed') {
+			if (!closeNotifiedRef.current) {
+				closeNotifiedRef.current = true;
+				onCloseRef.current(leavingRef.current ? 'left' : 'closed');
+			}
+			return;
+		}
+		if (
+			current?.status === 'started' &&
+			current.matchId &&
+			enteredMatchRef.current !== current.matchId
+		) {
+			enteredMatchRef.current = current.matchId;
+			setView({ screen: 'game', matchId: current.matchId });
+			onMatchEnteredRef.current?.(current.matchId);
+		} else if (current?.status === 'open') {
+			enteredMatchRef.current = null;
+			setView((previous) =>
+				previous.screen === 'lobby' ? previous : { screen: 'lobby' },
+			);
+		}
+	}, [current, loading, errorDetails, userId]);
+
+	const startMatch = useCallback(async () => {
+		const match = await start();
+		if (mountedRef.current && match) {
+			enteredMatchRef.current = match.id;
+			setView({ screen: 'game', matchId: match.id });
+		}
+		return match;
+	}, [start]);
+
+	const leaveOrClose = useCallback(async () => {
+		leavingRef.current = true;
+		try {
+			if (lobby.hostId === userId) await close();
+			else await leave();
+			if (mountedRef.current && !closeNotifiedRef.current) {
+				closeNotifiedRef.current = true;
+				onCloseRef.current('left');
+			}
+		} catch (err) {
+			leavingRef.current = false;
+			throw err;
+		}
+	}, [lobby.hostId, userId, close, leave]);
+
+	const kickPlayer = useCallback(
+		async (targetUserId: string) => kick(targetUserId),
+		[kick],
+	);
+
+	const prepareRematch = useCallback(async () => {
+		if (!lobby.matchId) return null;
+		return rematch(lobby.matchId);
+	}, [lobby.matchId, rematch]);
+
+	const returnToLobby = useCallback(() => setView({ screen: 'lobby' }), []);
+
+	const resumeMatch = useCallback(() => {
+		if (lobby.matchId) setView({ screen: 'game', matchId: lobby.matchId });
+	}, [lobby.matchId]);
+
+	return {
+		lobby,
+		view,
+		isHost,
+		isReady,
+		canStart,
+		loading,
+		acting,
+		error,
+		errorDetails,
+		setReady,
+		startMatch,
+		leaveOrClose,
+		kickPlayer,
+		prepareRematch,
+		returnToLobby,
+		resumeMatch,
 	};
 };
 
@@ -1340,10 +1584,107 @@ export const useLeaderboard = () => {
 	};
 };
 
+export interface UseProfilesOptions {
+	/** Polling interval in ms; default 5000. Set false to refresh only when `userIds` changes. */
+	pollIntervalMs?: number | false;
+	/** Optional runtime override (defaults to `useBame().bame`). */
+	runtime?: Pick<BameRuntime, 'profiles'>;
+}
+
+function mergeProfileMap(
+	members: Set<string>,
+	current: Record<string, Profile>,
+	incoming: Record<string, Profile>,
+): Record<string, Profile> {
+	const next: Record<string, Profile> = {};
+	for (const [id, profile] of Object.entries(current)) {
+		if (members.has(id)) next[id] = profile;
+	}
+	for (const [id, profile] of Object.entries(incoming)) {
+		if (
+			members.has(id) &&
+			(!Object.hasOwn(next, id) || profile.version > next[id].version)
+		) {
+			next[id] = profile;
+		}
+	}
+	return next;
+}
+
+/**
+ * Fetch and periodically refresh player profiles without opening one SSE stream
+ * per player. Keeps monotonic versions and retains cached entries on transient failures.
+ */
+export const useProfiles = (
+	userIds: readonly string[],
+	{ pollIntervalMs = 5000, runtime }: UseProfilesOptions = {},
+): Record<string, Profile> => {
+	const { bame } = useBame();
+	const profilesApi = (runtime ?? bame).profiles;
+	const [profiles, setProfiles] = useState<Record<string, Profile>>({});
+	const cacheRef = useRef<Record<string, Profile>>({});
+	const userIdsKey = userIds.join('\0');
+
+	useEffect(() => {
+		let disposed = false;
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const ids = userIdsKey ? userIdsKey.split('\0') : [];
+		const members = new Set(ids);
+
+		const apply = (incoming: Record<string, Profile>) => {
+			if (disposed) return;
+			const merged = mergeProfileMap(members, cacheRef.current, incoming);
+			if (JSON.stringify(merged) === JSON.stringify(cacheRef.current)) return;
+			cacheRef.current = merged;
+			setProfiles(merged);
+		};
+
+		const poll = async () => {
+			const entries = await Promise.all(
+				[...members].map(async (id) => {
+					try {
+						const profile = await profilesApi.get(id);
+						if (profile) return [id, profile] as const;
+					} catch {
+						// Profile metadata is optional; retain cached values on transient failures.
+					}
+					return Object.hasOwn(cacheRef.current, id)
+						? ([id, cacheRef.current[id]] as const)
+						: undefined;
+				}),
+			);
+			const incoming: Record<string, Profile> = {};
+			for (const entry of entries) {
+				if (entry) incoming[entry[0]] = entry[1];
+			}
+			apply(incoming);
+			if (
+				!disposed &&
+				pollIntervalMs !== false &&
+				Number.isFinite(pollIntervalMs) &&
+				pollIntervalMs > 0
+			) {
+				timer = setTimeout(() => void poll(), pollIntervalMs);
+			}
+		};
+
+		apply({});
+		if (members.size > 0) void poll();
+		return () => {
+			disposed = true;
+			clearTimeout(timer);
+		};
+	}, [profilesApi, userIdsKey, pollIntervalMs]);
+
+	return profiles;
+};
+
 export interface UsePresenceOptions {
 	userId?: string;
 	enabled?: boolean;
 	heartbeatMs?: number;
+	/** Optional roster IDs pre-populated as `'offline'` when absent from live presence. */
+	playerIds?: readonly string[];
 }
 
 const currentWindowPresence = (): PresenceStatus => {
@@ -1359,6 +1700,7 @@ export const usePresence = (
 		userId: explicitUserId,
 		enabled = true,
 		heartbeatMs = 15_000,
+		playerIds,
 	}: UsePresenceOptions = {},
 ): Record<string, PresenceStatus> => {
 	const { bame, userId: contextUserId } = useBame();
@@ -1471,10 +1813,17 @@ export const usePresence = (
 		};
 	}, [bame, scope, userId, enabled, heartbeatMs]);
 
+	const playerIdsKey = playerIds?.join('\0') ?? '';
+
 	return useMemo(() => {
 		if (!enabled || !scope || !userId) return {};
 		const now = Date.now();
 		const map: Record<string, PresenceStatus> = {};
+		if (playerIdsKey) {
+			for (const id of playerIdsKey.split('\0')) {
+				if (id) map[id] = 'offline';
+			}
+		}
 		for (const [id, entry] of Object.entries(entries)) {
 			map[id] =
 				entry.status !== 'offline' && entry.expiresAt <= now
@@ -1483,5 +1832,5 @@ export const usePresence = (
 		}
 		map[userId] = localStatus;
 		return map;
-	}, [enabled, scope, userId, entries, localStatus]);
+	}, [enabled, scope, userId, entries, localStatus, playerIdsKey]);
 };

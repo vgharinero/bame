@@ -1,14 +1,15 @@
 import http from 'node:http';
-import { createBameNodeHandler } from './node-handler.js';
 import {
 	type BameInstance,
 	type CreateBameHandlerOptions,
 	createBameHandler,
 } from '@bame/core';
+import { createBameNodeHandler } from './node-handler.js';
 
 export interface ListenBameServerOptions extends CreateBameHandlerOptions {
 	port?: number;
 	path?: string;
+	trustProxy?: boolean;
 }
 
 /**
@@ -32,6 +33,7 @@ export const listenBameServer = (
 			path: basePath,
 			maxBodyBytes: options.maxBodyBytes,
 			onError: bame.onError,
+			trustProxy: options.trustProxy,
 		}),
 	);
 

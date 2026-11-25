@@ -1,7 +1,7 @@
 {
 	"name": "@bame/storage-local",
 	"version": "0.2.0",
-	"description": "Local JSON file storage adapter and standalone Node.js HTTP server for Bame",
+	"description": "Local JSON file storage adapter for Bame",
 	"license": "MIT",
 	"author": "Víctor Granados (https://github.com/vgharinero)",
 	"repository": {

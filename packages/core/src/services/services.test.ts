@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { defineGame, invalid } from '../engine';
 import { createBame } from './create-bame';
-import { createBameClient, createBameHandler } from './network';
+import {
+	createBameClient,
+	createBameHandler,
+	isOriginPermitted,
+} from './network';
 
 const simpleGame = defineGame({
 	name: 'simple',
@@ -598,5 +602,55 @@ describe('createBame services (lobbies & matches)', () => {
 			error: 'Finished matches are final',
 			code: 'MATCH_FINISHED',
 		});
+	});
+
+	it('should support predicate allowedOrigins in createBameHandler and isOriginPermitted', async () => {
+		const serverBame = createBame({ games: [simpleGame] });
+		const handler = createBameHandler(serverBame, {
+			unsafeTrustClientIds: true,
+			allowedOrigins: (origin, req) =>
+				origin === 'https://allowed.example' &&
+				new URL(req.url).hostname === 'api.internal',
+		});
+		const ok = await handler.POST(
+			new Request('http://api.internal/api/bame', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Origin: 'https://allowed.example',
+				},
+				body: JSON.stringify({ service: 'profiles', method: 'list', args: [] }),
+			}),
+		);
+		expect(ok.status).toBe(200);
+		expect(ok.headers.get('access-control-allow-origin')).toBe(
+			'https://allowed.example',
+		);
+		const denied = await handler.POST(
+			new Request('http://api.internal/api/bame', {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Origin: 'https://denied.example',
+				},
+				body: JSON.stringify({ service: 'profiles', method: 'list', args: [] }),
+			}),
+		);
+		expect(denied.status).toBe(403);
+		expect(
+			await isOriginPermitted(
+				new Request('https://same.example/api/bame', {
+					headers: { Origin: 'https://same.example' },
+				}),
+			),
+		).toBe(true);
+		expect(
+			await isOriginPermitted(
+				new Request('http://same.example/api/bame', {
+					headers: { Origin: 'https://other.example' },
+				}),
+				['https://other.example'],
+			),
+		).toBe(true);
 	});
 });

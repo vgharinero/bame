@@ -1,6 +1,8 @@
 import { VersionConflictError } from '@bame/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
+	createSupabaseUserResolver,
+	extractBearerToken,
 	type SupabaseClientLike,
 	supabaseRealtime,
 	supabaseStorage,
@@ -182,5 +184,42 @@ describe('@bame/storage-supabase', () => {
 		await realtime.publish('match:m1', { hello: 'world' });
 		expect(received).toEqual([{ hello: 'world' }]);
 		unsub();
+	});
+
+	it('extracts and verifies bearer tokens via createSupabaseUserResolver', async () => {
+		expect(extractBearerToken(new Request('http://localhost'))).toBeNull();
+		expect(
+			extractBearerToken(
+				new Request('http://localhost', {
+					headers: { authorization: 'bearer my-jwt' },
+				}),
+			),
+		).toBe('my-jwt');
+
+		const getUser = vi
+			.fn()
+			.mockResolvedValueOnce({ data: { user: { id: 'u1' } }, error: null })
+			.mockResolvedValueOnce({
+				data: { user: null },
+				error: { message: 'bad' },
+			});
+		const resolve = createSupabaseUserResolver({ auth: { getUser } });
+
+		expect(await resolve(new Request('http://localhost'))).toBeNull();
+		expect(
+			await resolve(
+				new Request('http://localhost', {
+					headers: { authorization: 'Bearer valid-jwt' },
+				}),
+			),
+		).toBe('u1');
+		expect(
+			await resolve(
+				new Request('http://localhost', {
+					headers: { authorization: 'bearer bad-jwt' },
+				}),
+			),
+		).toBeNull();
+		expect(getUser).toHaveBeenCalledTimes(2);
 	});
 });

@@ -199,15 +199,17 @@ const serverBame = createBame({ games: [rockPaperScissors] });
 
 // Exports GET (SSE realtime stream) and POST (JSON-RPC commands)
 // Optional: pass `{ getUserId: async (req) => ... }` to verify session cookies or JWTs and prevent impersonation!
+// Optional: pass `allowedOrigins` as a static array or `(origin, req) => boolean` predicate for proxies/tunnels!
 export const { GET, POST } = createBameHandler(serverBame, {
 	getUserId: async (req) => {
-		// Return the authenticated user's ID from your auth provider (or omit `getUserId` for open/guest play)
+		// Return the authenticated user's ID from your auth provider (or omit `getUserId` and set `unsafeTrustClientIds: true` for guest play)
 		return req.headers.get('x-user-id');
 	},
+	allowedOrigins: (origin) => origin === 'https://play.example.com',
 });
 ```
 
-*(For a standalone Node.js HTTP server, see `listenBameServer` in [`@bame/storage-local`](../storage/local/README.md)).*
+*(For a standalone Node.js HTTP server, see `listenBameServer` in [`@bame/server-node`](../server/node/README.md). Custom endpoints can reuse `isOriginPermitted(req, allowedOrigins)` for matching origin checks, and server hooks can use `getNewlyWaitingPlayers(event)` and `createWebhookDispatcher(url)` for async notifications.)*
 
 ### Client (Browser or Node.js Terminal)
 ```ts

@@ -1,6 +1,6 @@
 # Bame — AI Agent Game Development Guide (`AGENTS.md`)
 
-You are building a turn-based game using **Bame** (`@bame/core`, `@bame/ui-console`, `@bame/ui-react`, `@bame/storage-local`, `@bame/storage-supabase`, `@bame/storage-firestore`).
+You are building a turn-based game using **Bame** (`@bame/core`, `@bame/ui-console`, `@bame/ui-react`, `@bame/storage-local`, `@bame/storage-supabase`, `@bame/storage-firestore`, `@bame/server-node`, `@bame/server-vite`).
 Follow every rule in this file strictly so the game compiles and runs with **zero TypeScript or runtime errors** on the first attempt.
 
 ---

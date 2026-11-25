@@ -81,6 +81,35 @@ export interface SupabaseClientLike {
 	};
 }
 
+export interface SupabaseAuthClientLike {
+	auth: {
+		getUser(jwt: string): PromiseLike<{
+			data: { user: { id: string } | null };
+			error: unknown;
+		}>;
+	};
+}
+
+/** Extract a Bearer token from the `Authorization` header (case-insensitive). */
+export function extractBearerToken(request: Request): string | null {
+	const auth = request.headers.get('authorization');
+	return auth?.match(/^Bearer\s+(\S+)\s*$/i)?.[1] ?? null;
+}
+
+/**
+ * Create a `getUserId` callback for `createBameHandler` that verifies Supabase
+ * bearer JWTs using the provided client.
+ */
+export const createSupabaseUserResolver =
+	(client: SupabaseAuthClientLike) =>
+	async (request: Request): Promise<string | null> => {
+		const token = extractBearerToken(request);
+		if (!token) return null;
+		const { data, error } = await client.auth.getUser(token);
+		if (error || !data.user) return null;
+		return data.user.id;
+	};
+
 /**
  * Supabase Storage adapter for Bame (`lobbies`, `matches`, `profiles` tables).
  * Each table requires columns: `(id text primary key, version integer not null, data jsonb not null)`.

@@ -1,10 +1,13 @@
 // @vitest-environment happy-dom
 
 import {
+	BameError,
 	type BameRuntime,
 	createBame,
 	defineGame,
 	type GameNotification,
+	type Lobby,
+	lobbyPresenceScope,
 	type MatchView,
 	type MoveContext,
 	type SetupContext,
@@ -14,10 +17,17 @@ import { createRoot } from 'react-dom/client';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
 	BameProvider,
+	clearStoredLobbyId,
+	readStoredLobbyId,
+	resumeLobby,
 	useBame,
+	useLobbySession,
 	useMatch,
 	useMatchesList,
 	useNotifications,
+	usePresence,
+	useProfiles,
+	writeStoredLobbyId,
 } from './hooks.js';
 
 const cleanups: (() => Promise<void>)[] = [];
@@ -285,5 +295,139 @@ describe('match list ownership and ordering', () => {
 		await act(async () => latest.resolve([{ id: 'latest' } as MatchView]));
 		await act(async () => old.resolve([{ id: 'old' } as MatchView]));
 		expect(list.matches.map((match) => match.id)).toEqual(['latest']);
+	});
+});
+
+describe('lobby session, profiles, storage, and presence defaults', () => {
+	it('persists lobby IDs safely and resumes active memberships while clearing terminal errors', async () => {
+		const store = new Map<string, string>();
+		const storage = () => ({
+			getItem: (k: string) => store.get(k) ?? null,
+			setItem: (k: string, v: string) => void store.set(k, v),
+			removeItem: (k: string) => void store.delete(k),
+		});
+		writeStoredLobbyId('lobby-1', 'custom:key', storage);
+		expect(readStoredLobbyId('custom:key', storage)).toBe('lobby-1');
+		clearStoredLobbyId('custom:key', storage);
+		expect(readStoredLobbyId('custom:key', storage)).toBeNull();
+
+		const get = vi
+			.fn()
+			.mockResolvedValueOnce({
+				id: 'r1',
+				status: 'started',
+				members: [{ userId: 'host' }],
+			})
+			.mockResolvedValueOnce({
+				id: 'r1',
+				status: 'open',
+				members: [{ userId: 'other' }],
+			})
+			.mockRejectedValueOnce(
+				new BameError({ code: 'FORBIDDEN', message: 'no' }),
+			)
+			.mockRejectedValueOnce(
+				new BameError({ code: 'TRANSPORT_ERROR', message: 'offline' }),
+			);
+		const api = { lobbies: { get } } as unknown as BameRuntime;
+		expect(await resumeLobby(api, 'r1', 'host')).toMatchObject({ id: 'r1' });
+		expect(await resumeLobby(api, 'r1', 'host')).toBeNull();
+		expect(await resumeLobby(api, 'r1', 'host')).toBeNull();
+		await expect(resumeLobby(api, 'r1', 'host')).rejects.toThrow('offline');
+	});
+
+	it('manages lobby session screen transitions, rematch, and kick notifications', async () => {
+		const game = defineGame({
+			name: 'session-game',
+			players: 2,
+			setup: setupCounter,
+			moves: { increment },
+		});
+		const api = createBame({ games: [game] });
+		const created = await api.lobbies.create({
+			userId: 'host',
+			game: game.name,
+			isPrivate: true,
+		});
+		const joined = await api.lobbies.joinByCode({
+			userId: 'guest',
+			code: created.code!,
+		});
+		const onClose = vi.fn();
+		let session!: ReturnType<typeof useLobbySession>;
+		function Probe() {
+			session = useLobbySession(joined, { onClose });
+			return <span>{session.view.screen}</span>;
+		}
+		await render(
+			<BameProvider bame={api} userId="host">
+				<Probe />
+			</BameProvider>,
+		);
+		await act(async () => {
+			await session.startMatch();
+		});
+		expect(session.view.screen).toBe('game');
+		await act(async () => session.returnToLobby());
+		expect(session.view.screen).toBe('lobby');
+		await act(async () => {
+			await api.matches.forfeit({
+				userId: 'host',
+				matchId: session.lobby.matchId!,
+			});
+			await session.prepareRematch();
+		});
+		expect(session.canStart).toBe(true);
+
+		const guestClose = vi.fn();
+		function GuestProbe() {
+			useLobbySession(joined, { onClose: guestClose });
+			return null;
+		}
+		await render(
+			<BameProvider bame={api} userId="guest">
+				<GuestProbe />
+			</BameProvider>,
+		);
+		await act(async () => {
+			await api.lobbies.kick({
+				userId: 'host',
+				lobbyId: joined.id,
+				targetUserId: 'guest',
+			});
+		});
+		expect(guestClose).toHaveBeenCalledWith('removed');
+	});
+
+	it('polls profiles monotonically and fills offline defaults in usePresence', async () => {
+		vi.useFakeTimers();
+		const api = createBame({ games: [] });
+		await api.profiles.update('p1', { displayName: 'One' });
+		await api.profiles.update('p2', { displayName: 'Two' });
+		let profiles!: ReturnType<typeof useProfiles>;
+		let presence!: ReturnType<typeof usePresence>;
+		function Probe() {
+			profiles = useProfiles(['p1', 'p2'], { pollIntervalMs: 100 });
+			presence = usePresence(lobbyPresenceScope('l1'), {
+				playerIds: ['p1', 'p2', 'p3'],
+			});
+			return null;
+		}
+		await render(
+			<BameProvider bame={api} userId="p1">
+				<Probe />
+			</BameProvider>,
+		);
+		expect(profiles.p2?.displayName).toBe('Two');
+		expect(presence).toMatchObject({
+			p1: 'online',
+			p2: 'offline',
+			p3: 'offline',
+		});
+		await act(async () => {
+			await api.profiles.update('p2', { displayName: 'Two Updated' });
+			await vi.advanceTimersByTimeAsync(100);
+		});
+		expect(profiles.p2?.displayName).toBe('Two Updated');
 	});
 });
