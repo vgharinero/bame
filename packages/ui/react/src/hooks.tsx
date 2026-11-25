@@ -192,11 +192,17 @@ export interface UseLobbyOptions<TConfig = unknown> {
 	initialLobby?: Lobby<TConfig>;
 	/** Recovery polling in milliseconds; false disables it. Default: 2000. */
 	pollIntervalMs?: number | false;
+	/** Open a real-time SSE subscription for lobby updates. Default: true. */
+	subscribe?: boolean;
 }
 
 export const useLobby = <TConfig = unknown>(
 	controlledLobbyId: string | null = null,
-	{ initialLobby, pollIntervalMs = 2000 }: UseLobbyOptions<TConfig> = {},
+	{
+		initialLobby,
+		pollIntervalMs = 2000,
+		subscribe: enableSubscribe = true,
+	}: UseLobbyOptions<TConfig> = {},
 ) => {
 	const { bame, userId } = useBame();
 	const [internalLobbyId, setInternalLobbyId] = useState<string | null>(
@@ -221,6 +227,7 @@ export const useLobby = <TConfig = unknown>(
 	const [acting, setActing] = useState<boolean>(false);
 	const [error, setError, errorDetails] = useErrorState();
 	const versionRef = useRef<number>(0);
+	const refreshRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
 	useEffect(() => {
 		if (controlledLobbyId !== null) {
@@ -301,31 +308,13 @@ export const useLobby = <TConfig = unknown>(
 				timer = setTimeout(() => void poll(), pollIntervalMs);
 			}
 		};
-		const unsub = runtime.lobbies.subscribe(
-			lobbyId,
-			(updated) => {
-				if (!cancelled) applyLobbySnapshot(updated as Lobby<TConfig>);
-			},
-			{
-				userId,
-				onReady: () => refresh(),
-				onError: (error) => {
-					if (!cancelled)
-						setError(
-							error instanceof Error
-								? error.message
-								: 'Lobby subscription failed',
-							error,
-						);
-				},
-			},
-		);
+		refreshRef.current = refresh;
 		void poll();
 		return () => {
 			cancelled = true;
 			controller.abort();
 			clearTimeout(timer);
-			unsub();
+			refreshRef.current = () => Promise.resolve();
 		};
 	}, [
 		bame,
@@ -337,6 +326,34 @@ export const useLobby = <TConfig = unknown>(
 		setLobby,
 		setError,
 	]);
+
+	useEffect(() => {
+		if (!lobbyId || !enableSubscribe) return;
+		let cancelled = false;
+		const unsub = bame.lobbies.subscribe(
+			lobbyId,
+			(updated) => {
+				if (!cancelled) applyLobbySnapshot(updated as Lobby<TConfig>);
+			},
+			{
+				userId,
+				onReady: () => refreshRef.current(),
+				onError: (error) => {
+					if (!cancelled)
+						setError(
+							error instanceof Error
+								? error.message
+								: 'Lobby subscription failed',
+							error,
+						);
+				},
+			},
+		);
+		return () => {
+			cancelled = true;
+			unsub();
+		};
+	}, [bame, lobbyId, userId, enableSubscribe, applyLobbySnapshot, setError]);
 
 	const create = useCallback(
 		async (input: CreateLobbyHookInput<TConfig>) => {
@@ -1154,6 +1171,7 @@ export const useNotifications = <TData = unknown>(
 					}
 				}
 			},
+			{ userId },
 		);
 		return () => {
 			cancelled = true;

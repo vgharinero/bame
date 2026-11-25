@@ -26,9 +26,11 @@ import {
 	type Lobby,
 	type LobbyPreview,
 	lobbyChannel,
+	lobbyPresenceScope,
 	type MatchActionInput,
 	type MoveInput,
 	matchPlayerChannel,
+	matchPresenceScope,
 	type PresenceSnapshot,
 	type PresenceStatus,
 	type Profile,
@@ -148,6 +150,10 @@ const lobbyView = (l: Lobby | null) =>
 		: null;
 
 const presenceStreamsByBame = new WeakMap<BameInstance, Map<string, number>>();
+const pendingOfflineByBame = new WeakMap<
+	BameInstance,
+	Map<string, ReturnType<typeof setTimeout>>
+>();
 
 export const createBameHandler = (
 	bame: BameInstance,
@@ -186,6 +192,11 @@ export const createBameHandler = (
 	if (!activePresenceStreams) {
 		activePresenceStreams = new Map<string, number>();
 		presenceStreamsByBame.set(bame, activePresenceStreams);
+	}
+	let pendingOffline = pendingOfflineByBame.get(bame);
+	if (!pendingOffline) {
+		pendingOffline = new Map<string, ReturnType<typeof setTimeout>>();
+		pendingOfflineByBame.set(bame, pendingOffline);
 	}
 	const authorizeMatch = async (
 		req: Request,
@@ -381,14 +392,12 @@ export const createBameHandler = (
 	};
 	const get = async (req: Request) => {
 		const url = new URL(req.url);
-		const channel = url.searchParams.get('channel') ?? '';
-		const match = /^match:([^:]+):player:([^:]+)$/.exec(channel),
-			lobby = /^lobby:([^:]+)$/.exec(channel),
-			profile = /^profile:([^:]+)$/.exec(channel),
-			notification = /^user:([^:]+):notifications$/.exec(channel),
-			presence = /^presence:((?:match|lobby):[^:]+)$/.exec(channel);
-		if (!match && !lobby && !profile && !notification && !presence)
-			fail(400, 'INVALID_CHANNEL', 'Unknown subscription channel');
+		const mux = url.searchParams.get('mux') === '1';
+		const rawChannels = mux
+			? [...new Set(url.searchParams.getAll('channel'))]
+			: [url.searchParams.get('channel') ?? ''];
+		if (rawChannels.length === 0)
+			fail(400, 'INVALID_CHANNEL', 'Missing subscription channel');
 		const decode = (value: string) => {
 			try {
 				return decodeURIComponent(value);
@@ -396,79 +405,164 @@ export const createBameHandler = (
 				return fail(400, 'INVALID_CHANNEL', 'Invalid channel identifier');
 			}
 		};
-		const owner = match
-			? decode(match[2])
-			: notification
-				? decode(notification[1])
-				: undefined;
-		const resource = decode(
-			(match ?? lobby ?? profile ?? notification)?.[1] ?? '',
-		);
-		const presenceScope = presence ? presence[1] : undefined;
-		let presenceUserId: string | undefined;
-		const authorize = async () => {
-			if (presenceScope) {
-				presenceUserId = await authorizePresenceScope(
-					req,
-					presenceScope,
-					options.unsafeTrustClientIds
-						? url.searchParams.get('userId')
-						: undefined,
-				);
-				return;
-			}
-			const user = await identity(
-				req,
-				owner ??
-					(options.unsafeTrustClientIds
-						? url.searchParams.get('userId')
-						: undefined),
-				Boolean(owner),
+		interface StreamEntry {
+			channel: string;
+			isMatch: boolean;
+			isNotification: boolean;
+			isPresence: boolean;
+			presenceScope?: string;
+			presenceUserId?: string;
+			presenceStreamKey?: string;
+			authorize: () => Promise<void>;
+			snapshot: () => Promise<unknown>;
+			unsub: Unsubscribe;
+			disposed: boolean;
+			serial: Promise<void>;
+		}
+		const parseEntry = (channel: string): StreamEntry => {
+			const match = /^match:([^:]+):player:([^:]+)$/.exec(channel),
+				lobby = /^lobby:([^:]+)$/.exec(channel),
+				profile = /^profile:([^:]+)$/.exec(channel),
+				notification = /^user:([^:]+):notifications$/.exec(channel),
+				presence = /^presence:((?:match|lobby):[^:]+)$/.exec(channel);
+			if (!match && !lobby && !profile && !notification && !presence)
+				fail(400, 'INVALID_CHANNEL', 'Unknown subscription channel');
+			const owner = match
+				? decode(match[2])
+				: notification
+					? decode(notification[1])
+					: undefined;
+			const resource = decode(
+				(match ?? lobby ?? profile ?? notification)?.[1] ?? '',
 			);
-			if (match) {
-				const viewer = await authorizeMatch(req, resource, user);
-				if (viewer !== owner)
-					fail(403, 'FORBIDDEN', 'Forbidden player channel');
+			const presenceScope = presence
+				? presence[1]
+				: match
+					? matchPresenceScope(resource)
+					: lobby
+						? lobbyPresenceScope(resource)
+						: undefined;
+			const isPresence = Boolean(presence);
+			const entry: StreamEntry = {
+				channel,
+				isMatch: Boolean(match),
+				isNotification: Boolean(notification),
+				isPresence,
+				presenceScope,
+				unsub: () => {},
+				disposed: false,
+				serial: Promise.resolve(),
+				authorize: async () => {
+					if (isPresence && presenceScope) {
+						entry.presenceUserId = await authorizePresenceScope(
+							req,
+							presenceScope,
+							options.unsafeTrustClientIds
+								? url.searchParams.get('userId')
+								: undefined,
+						);
+						return;
+					}
+					const user = await identity(
+						req,
+						owner ??
+							(options.unsafeTrustClientIds
+								? url.searchParams.get('userId')
+								: undefined),
+						Boolean(owner),
+					);
+					if (match) {
+						const viewer = await authorizeMatch(req, resource, user);
+						if (viewer !== owner)
+							fail(403, 'FORBIDDEN', 'Forbidden player channel');
+						if (viewer) entry.presenceUserId = viewer;
+					}
+					if (lobby) {
+						const current = await bame.storage.get<Lobby>('lobbies', resource);
+						if (!current) return fail(404, 'NOT_FOUND', 'Lobby not found');
+						if (
+							!current.isPublic &&
+							!current.members.some((m) => m.userId === user)
+						)
+							fail(403, 'FORBIDDEN', 'Forbidden private lobby');
+						if (user) entry.presenceUserId = user;
+					}
+				},
+				snapshot: async () =>
+					isPresence && presenceScope
+						? await bame.presence.get(presenceScope)
+						: match
+							? await bame.matches.get(resource, owner)
+							: lobby
+								? lobbyView(
+										await bame.lobbies.get(
+											resource,
+											options.unsafeTrustClientIds
+												? (url.searchParams.get('userId') ?? undefined)
+												: ((await options.getUserId?.(req)) ?? undefined),
+										),
+									)
+								: profile
+									? profileView(await bame.profiles.get(resource))
+									: undefined,
+			};
+			return entry;
+		};
+		const entries = rawChannels.map(parseEntry);
+		let initialErrors: Array<unknown | null> = entries.map(() => null);
+		if (!mux) {
+			await entries[0].authorize();
+		} else {
+			const settled = await Promise.allSettled(
+				entries.map((entry) => entry.authorize()),
+			);
+			initialErrors = settled.map((res) =>
+				res.status === 'rejected' ? res.reason : null,
+			);
+			if (initialErrors.every((err) => err !== null)) {
+				throw initialErrors[0];
 			}
-			if (lobby) {
-				const current = await bame.storage.get<Lobby>('lobbies', resource);
-				if (!current) return fail(404, 'NOT_FOUND', 'Lobby not found');
-				if (
-					!current.isPublic &&
-					!current.members.some((m) => m.userId === user)
-				)
-					fail(403, 'FORBIDDEN', 'Forbidden private lobby');
+		}
+		const acquirePresence = (entry: StreamEntry) => {
+			if (!entry.presenceScope || !entry.presenceUserId) return;
+			const key = `${entry.presenceScope}::${entry.presenceUserId}`;
+			entry.presenceStreamKey = key;
+			const pending = pendingOffline.get(key);
+			if (pending) {
+				clearTimeout(pending);
+				pendingOffline.delete(key);
+			}
+			activePresenceStreams.set(key, (activePresenceStreams.get(key) ?? 0) + 1);
+		};
+		const releasePresence = (entry: StreamEntry) => {
+			const key = entry.presenceStreamKey;
+			const scope = entry.presenceScope;
+			const uid = entry.presenceUserId;
+			if (!key || !scope || !uid) return;
+			entry.presenceStreamKey = undefined;
+			const remaining = (activePresenceStreams.get(key) ?? 1) - 1;
+			if (remaining <= 0) {
+				activePresenceStreams.delete(key);
+				const prev = pendingOffline.get(key);
+				if (prev) clearTimeout(prev);
+				const timer = setTimeout(() => {
+					pendingOffline.delete(key);
+					if ((activePresenceStreams.get(key) ?? 0) <= 0) {
+						void bame.presence.report({
+							scope,
+							userId: uid,
+							status: 'offline',
+						});
+					}
+				}, 150);
+				pendingOffline.set(key, timer);
+			} else {
+				activePresenceStreams.set(key, remaining);
 			}
 		};
-		await authorize();
-		const snapshot = async () =>
-			presenceScope
-				? await bame.presence.get(presenceScope)
-				: match
-					? await bame.matches.get(resource, owner)
-					: lobby
-						? lobbyView(
-								await bame.lobbies.get(
-									resource,
-									options.unsafeTrustClientIds
-										? (url.searchParams.get('userId') ?? undefined)
-										: ((await options.getUserId?.(req)) ?? undefined),
-								),
-							)
-						: profile
-							? profileView(await bame.profiles.get(resource))
-							: undefined;
-		const presenceStreamKey =
-			presenceScope && presenceUserId
-				? `${presenceScope}::${presenceUserId}`
-				: undefined;
-		if (presenceStreamKey) {
-			activePresenceStreams.set(
-				presenceStreamKey,
-				(activePresenceStreams.get(presenceStreamKey) ?? 0) + 1,
-			);
+		for (let i = 0; i < entries.length; i++) {
+			if (!initialErrors[i]) acquirePresence(entries[i]);
 		}
-		let unsub: Unsubscribe = () => {};
 		let closed = false;
 		let timer: ReturnType<typeof setInterval> | undefined;
 		let dispose = () => {};
@@ -486,72 +580,84 @@ export const createBameHandler = (
 							),
 						);
 				};
+				const disposeEntry = (entry: StreamEntry) => {
+					if (entry.disposed) return;
+					entry.disposed = true;
+					entry.unsub();
+					releasePresence(entry);
+				};
 				dispose = () => {
 					if (closed) return;
 					closed = true;
-					unsub();
+					for (const entry of entries) disposeEntry(entry);
 					clearInterval(timer);
 					req.signal.removeEventListener('abort', dispose);
-					if (presenceStreamKey && presenceScope && presenceUserId) {
-						const remaining =
-							(activePresenceStreams.get(presenceStreamKey) ?? 1) - 1;
-						if (remaining <= 0) {
-							activePresenceStreams.delete(presenceStreamKey);
-							void bame.presence.report({
-								scope: presenceScope,
-								userId: presenceUserId,
-								status: 'offline',
-							});
-						} else {
-							activePresenceStreams.set(presenceStreamKey, remaining);
-						}
-					}
 					try {
 						controller.close();
 					} catch {}
 				};
-				const error = (err: unknown) => {
-					if (closed) return;
-					send(
-						{ code: err instanceof HttpError ? err.code : 'STREAM_ERROR' },
-						'error',
-					);
-					dispose();
+				const entryError = (entry: StreamEntry, err: unknown) => {
+					if (closed || entry.disposed) return;
+					const code = err instanceof HttpError ? err.code : 'STREAM_ERROR';
+					if (mux) {
+						send({ channel: entry.channel, code }, 'channel_error');
+						disposeEntry(entry);
+						if (entries.every((item) => item.disposed)) dispose();
+					} else {
+						send({ code }, 'error');
+						dispose();
+					}
 				};
-				let serial = Promise.resolve();
-				const emit = (payload?: unknown) => {
-					serial = serial
+				const emitEntry = (entry: StreamEntry, payload?: unknown) => {
+					entry.serial = entry.serial
 						.then(async () => {
-							if (closed) return;
-							await authorize();
-							if (notification || presenceScope) {
-								if (payload) send(payload);
-								else if (presenceScope) send(await snapshot());
+							if (closed || entry.disposed) return;
+							await entry.authorize();
+							let out: unknown;
+							if (entry.isNotification || entry.isPresence) {
+								if (payload) out = payload;
+								else if (entry.isPresence) out = await entry.snapshot();
 							} else {
-								const current = await snapshot();
-								if (match) {
+								const current = await entry.snapshot();
+								if (entry.isMatch) {
 									const view = current as MatchView;
-									send({ version: view.version, view });
-								} else send(current);
+									out = { version: view.version, view };
+								} else out = current;
+							}
+							if (out !== undefined && !closed && !entry.disposed) {
+								send(mux ? { channel: entry.channel, data: out } : out);
 							}
 						})
-						.catch(error);
-					return serial;
+						.catch((err) => entryError(entry, err));
+					return entry.serial;
 				};
-				unsub = bame.realtime.subscribe(channel, (payload) => emit(payload), {
-					onReady: async () => {
-						await emit();
-						send({}, 'ready');
-					},
-					onError: error,
-				});
+				for (let i = 0; i < entries.length; i++) {
+					const entry = entries[i];
+					const initErr = initialErrors[i];
+					if (initErr) {
+						entryError(entry, initErr);
+						continue;
+					}
+					entry.unsub = bame.realtime.subscribe(
+						entry.channel,
+						(payload) => emitEntry(entry, payload),
+						{
+							onReady: async () => {
+								await emitEntry(entry);
+								if (!closed && !entry.disposed) {
+									send(mux ? { channel: entry.channel } : {}, 'ready');
+								}
+							},
+							onError: (err) => entryError(entry, err),
+						},
+					);
+				}
 				timer = setInterval(() => {
-					void authorize()
-						.then(() => {
-							if (!closed)
-								controller.enqueue(encoder.encode(': heartbeat\n\n'));
-						})
-						.catch(error);
+					for (const entry of entries) {
+						if (entry.disposed) continue;
+						void entry.authorize().catch((err) => entryError(entry, err));
+					}
+					if (!closed) controller.enqueue(encoder.encode(': heartbeat\n\n'));
 				}, 15000);
 				req.signal.addEventListener('abort', dispose, { once: true });
 				if (req.signal.aborted) dispose();
@@ -849,24 +955,65 @@ export const createBameClient = (
 			scope.dispose();
 		}
 	};
-	const subscribeChannel = <TPayload>(
-		channel: string,
-		callback: (payload: TPayload) => void | Promise<void>,
-		subscription?: SubscriptionOptions,
-	): Unsubscribe => {
+	interface MuxSubscriber {
+		id: number;
+		channel: string;
+		callback: (payload: unknown) => void | Promise<void>;
+		subscription?: SubscriptionOptions;
+	}
+	interface ActiveStream {
+		key: string;
+		controller: AbortController;
+		readyChannels: Set<string>;
+		notifiedReady: Set<number>;
+		abort: () => void;
+	}
+	interface ChannelGroup {
+		identityKey: string;
+		effectiveUserId: string | undefined;
+		subs: Map<number, MuxSubscriber>;
+		syncScheduled: boolean;
+		activeStream?: ActiveStream;
+		onClientAbort: () => void;
+	}
+	let nextSubscriberId = 1;
+	const streamGroups = new Map<string, ChannelGroup>();
+	const fatalCodes = new Set(['UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND']);
+
+	const startGroupStream = (
+		group: ChannelGroup,
+		channels: string[],
+		key: string,
+	): ActiveStream => {
 		const controller = new AbortController();
+		const isMux = channels.length > 1;
 		const separator = options.url.includes('?') ? '&' : '?';
-		const streamUrl =
-			options.url +
-			separator +
-			'channel=' +
-			encodeURIComponent(channel) +
-			((subscription?.userId ?? options.userId)
-				? `&userId=${encodeURIComponent((subscription?.userId ?? options.userId)!)}`
-				: '');
-		const stop = () => controller.abort();
-		options.signal?.addEventListener('abort', stop, { once: true });
-		if (options.signal?.aborted) stop();
+		const uidParam = group.effectiveUserId
+			? `&userId=${encodeURIComponent(group.effectiveUserId)}`
+			: '';
+		const streamUrl = isMux
+			? `${options.url}${separator}mux=1&${channels.map((ch) => `channel=${encodeURIComponent(ch)}`).join('&')}${uidParam}`
+			: `${options.url}${separator}channel=${encodeURIComponent(channels[0])}${uidParam}`;
+		const activeStream: ActiveStream = {
+			key,
+			controller,
+			readyChannels: new Set(),
+			notifiedReady: new Set(),
+			abort: () => controller.abort(),
+		};
+		const channelSet = new Set(channels);
+		const matchingSubs = (channel?: string) =>
+			[...group.subs.values()].filter((s) =>
+				channel ? s.channel === channel : channelSet.has(s.channel),
+			);
+		const notifySubsError = (err: unknown, channel?: string) => {
+			for (const sub of matchingSubs(channel)) {
+				try {
+					sub.subscription?.onError?.(err);
+				} catch {}
+			}
+		};
+
 		void (async () => {
 			let attempt = 0;
 			while (!controller.signal.aborted) {
@@ -887,15 +1034,22 @@ export const createBameClient = (
 						const details = (await scope.run(() =>
 							response.json().catch(() => ({})),
 						)) as { error?: string; code?: string };
-						subscription?.onError?.(
-							new BameTransportError(
-								details?.error ?? 'Subscription denied',
-								undefined,
-								details?.code ?? httpCode(response.status),
-								undefined,
-								response.status,
-							),
+						const err = new BameTransportError(
+							details?.error ?? 'Subscription denied',
+							undefined,
+							details?.code ?? httpCode(response.status),
+							undefined,
+							response.status,
 						);
+						const targets = matchingSubs();
+						for (const sub of targets) group.subs.delete(sub.id);
+						for (const sub of targets) {
+							try {
+								sub.subscription?.onError?.(err);
+							} catch {}
+						}
+						if (group.activeStream === activeStream)
+							group.activeStream = undefined;
 						return;
 					}
 					if (!response.ok || !response.body) {
@@ -903,46 +1057,86 @@ export const createBameClient = (
 						throw new Error('Stream unavailable');
 					}
 					scope.clearDeadline();
+					activeStream.readyChannels.clear();
+					activeStream.notifiedReady.clear();
 					for await (const event of readSse(response.body, scope.signal)) {
 						if (controller.signal.aborted) return;
 						if (event.event === 'ready') {
 							attempt = 0;
-							await subscription?.onReady?.();
+							const readyChannel = isMux
+								? (JSON.parse(event.data) as { channel: string }).channel
+								: channels[0];
+							activeStream.readyChannels.add(readyChannel);
+							for (const sub of matchingSubs(readyChannel)) {
+								activeStream.notifiedReady.add(sub.id);
+								await sub.subscription?.onReady?.();
+							}
+							continue;
+						}
+						if (event.event === 'channel_error') {
+							const details = JSON.parse(event.data) as {
+								channel: string;
+								code: string;
+							};
+							const fatal = fatalCodes.has(details.code);
+							const err = fatal
+								? new BameTransportError(
+										'Subscription access ended',
+										undefined,
+										details.code,
+									)
+								: new Error(`Channel interrupted (${details.code})`);
+							for (const sub of matchingSubs(details.channel)) {
+								if (fatal) group.subs.delete(sub.id);
+								try {
+									sub.subscription?.onError?.(err);
+								} catch {}
+							}
+							if (fatal) scheduleSync(group);
 							continue;
 						}
 						if (event.event === 'error') {
 							const details = JSON.parse(event.data) as { code: string };
-							if (
-								['UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND'].includes(
+							if (fatalCodes.has(details.code)) {
+								const err = new BameTransportError(
+									'Subscription access ended',
+									undefined,
 									details.code,
-								)
-							) {
-								subscription?.onError?.(
-									new BameTransportError(
-										'Subscription access ended',
-										undefined,
-										details.code,
-									),
 								);
+								const targets = matchingSubs();
+								for (const sub of targets) group.subs.delete(sub.id);
+								for (const sub of targets) {
+									try {
+										sub.subscription?.onError?.(err);
+									} catch {}
+								}
+								if (group.activeStream === activeStream)
+									group.activeStream = undefined;
 								return;
 							}
 							throw new Error('Stream interrupted');
 						}
-						try {
-							await callback(JSON.parse(event.data) as TPayload);
-						} catch (error) {
-							subscription?.onError?.(error);
+						const parsed = JSON.parse(event.data) as unknown;
+						const targetChannel = isMux
+							? (parsed as { channel: string; data: unknown }).channel
+							: channels[0];
+						const payload = isMux
+							? (parsed as { channel: string; data: unknown }).data
+							: parsed;
+						for (const sub of matchingSubs(targetChannel)) {
+							try {
+								await sub.callback(payload);
+							} catch (error) {
+								sub.subscription?.onError?.(error);
+							}
 						}
 					}
-					if (!controller.signal.aborted)
-						subscription?.onError?.(
-							new Error('Stream disconnected; reconnecting'),
-						);
+					if (!controller.signal.aborted) {
+						notifySubsError(new Error('Stream disconnected; reconnecting'));
+					}
 				} catch (error) {
 					if (controller.signal.aborted) return;
-					try {
-						subscription?.onError?.(error);
-					} catch {}
+					notifySubsError(error);
 				} finally {
 					scope.dispose();
 				}
@@ -952,10 +1146,96 @@ export const createBameClient = (
 					controller.signal,
 				);
 			}
-		})().finally(() => options.signal?.removeEventListener('abort', stop));
+		})();
+		return activeStream;
+	};
+
+	const syncGroup = (group: ChannelGroup) => {
+		group.syncScheduled = false;
+		if (options.signal?.aborted || group.subs.size === 0) {
+			group.activeStream?.abort();
+			group.activeStream = undefined;
+			options.signal?.removeEventListener('abort', group.onClientAbort);
+			streamGroups.delete(group.identityKey);
+			return;
+		}
+		const channels = [
+			...new Set([...group.subs.values()].map((s) => s.channel)),
+		].sort();
+		const desiredKey = channels.join('\n');
+		if (group.activeStream?.key === desiredKey) {
+			for (const sub of group.subs.values()) {
+				if (
+					group.activeStream.readyChannels.has(sub.channel) &&
+					!group.activeStream.notifiedReady.has(sub.id)
+				) {
+					group.activeStream.notifiedReady.add(sub.id);
+					void sub.subscription?.onReady?.();
+				}
+			}
+			return;
+		}
+		group.activeStream?.abort();
+		group.activeStream = startGroupStream(group, channels, desiredKey);
+	};
+
+	const scheduleSync = (group: ChannelGroup) => {
+		if (group.syncScheduled) return;
+		group.syncScheduled = true;
+		queueMicrotask(() => syncGroup(group));
+	};
+
+	const subscribeChannel = <TPayload>(
+		channel: string,
+		callback: (payload: TPayload) => void | Promise<void>,
+		subscription?: SubscriptionOptions,
+	): Unsubscribe => {
+		if (options.signal?.aborted) return () => {};
+		const effectiveUserId = subscription?.userId ?? options.userId;
+		const identityKey = effectiveUserId ?? '';
+		let group = streamGroups.get(identityKey);
+		if (!group) {
+			const created: ChannelGroup = {
+				identityKey,
+				effectiveUserId,
+				subs: new Map(),
+				syncScheduled: false,
+				onClientAbort: () => {
+					created.activeStream?.abort();
+					created.activeStream = undefined;
+					created.subs.clear();
+					streamGroups.delete(identityKey);
+				},
+			};
+			options.signal?.addEventListener('abort', created.onClientAbort, {
+				once: true,
+			});
+			streamGroups.set(identityKey, created);
+			group = created;
+		}
+		const id = nextSubscriberId++;
+		group.subs.set(id, {
+			id,
+			channel,
+			callback: callback as (payload: unknown) => void | Promise<void>,
+			subscription,
+		});
+		scheduleSync(group);
 		return () => {
-			stop();
-			options.signal?.removeEventListener('abort', stop);
+			const currentGroup = streamGroups.get(identityKey);
+			if (!currentGroup) return;
+			currentGroup.subs.delete(id);
+			if (currentGroup.subs.size === 0) {
+				currentGroup.activeStream?.abort();
+				currentGroup.activeStream = undefined;
+				options.signal?.removeEventListener(
+					'abort',
+					currentGroup.onClientAbort,
+				);
+				streamGroups.delete(identityKey);
+				return;
+			}
+			scheduleSync(currentGroup);
 		};
 	};
 
@@ -1093,7 +1373,7 @@ export const createBameClient = (
 				subscribeChannel<GameNotification<TData>>(
 					userNotificationChannel(userId),
 					callback,
-					subscription,
+					{ ...subscription, userId },
 				),
 		},
 

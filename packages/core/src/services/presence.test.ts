@@ -146,4 +146,87 @@ describe('presence service & remote transport', () => {
 		});
 		expect(snap.entries.bob.status).toBe('away');
 	});
+
+	it('multiplexes match, notifications, and presence for an identity supplied at subscription time', async () => {
+		const bame = createBame({ games: [dummyGame] });
+		const handler = createBameHandler(bame, { unsafeTrustClientIds: true });
+		let aliceSseCount = 0;
+		const aliceFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+			if (!init?.method || init.method === 'GET') aliceSseCount++;
+			return handler.fetch(new Request(input, init));
+		};
+		const bobFetch = (input: RequestInfo | URL, init?: RequestInit) =>
+			handler.fetch(new Request(input, init));
+
+		const alice = createBameClient({
+			url: 'http://localhost/api/bame',
+			fetch: aliceFetch,
+		});
+		const bob = createBameClient({
+			url: 'http://localhost/api/bame',
+			userId: 'bob',
+			fetch: bobFetch,
+		});
+
+		const lobby = await alice.lobbies.create({
+			userId: 'alice',
+			game: dummyGame.name,
+		});
+		await bob.lobbies.join({ userId: 'bob', lobbyId: lobby.id });
+		const match = await alice.lobbies.start({
+			userId: 'alice',
+			lobbyId: lobby.id,
+		});
+		const scope = matchPresenceScope(match.id);
+
+		const matchSnapshots: number[] = [];
+		const presenceSnapshots: Array<Record<string, string>> = [];
+		const notifications: unknown[] = [];
+		let readyCount = 0;
+
+		const stopMatch = alice.matches.subscribe(
+			match.id,
+			'alice',
+			(_v, version) => matchSnapshots.push(version),
+			{ onReady: () => void readyCount++ },
+		);
+		const stopNotifications = alice.matches.subscribeNotifications(
+			'alice',
+			(n) => notifications.push(n),
+			{ onReady: () => void readyCount++ },
+		);
+		const stopPresence = alice.presence.subscribe(
+			scope,
+			(snap) => {
+				presenceSnapshots.push(
+					Object.fromEntries(
+						Object.entries(snap.entries).map(([id, e]) => [id, e.status]),
+					),
+				);
+			},
+			{ userId: 'alice', onReady: () => void readyCount++ },
+		);
+
+		await vi.waitFor(() => expect(readyCount).toBe(3));
+		// Synchronous multi-subscribe in same tick must open ONLY ONE multiplexed SSE request!
+		expect(aliceSseCount).toBe(1);
+
+		await alice.presence.report({ scope, userId: 'alice', status: 'online' });
+		await alice.matches.move({
+			userId: 'alice',
+			matchId: match.id,
+			move: 'pass',
+		});
+
+		await vi.waitFor(() => {
+			expect(matchSnapshots.length).toBeGreaterThanOrEqual(2);
+			expect(
+				presenceSnapshots.some((entries) => entries.alice === 'online'),
+			).toBe(true);
+		});
+
+		stopMatch();
+		stopNotifications();
+		stopPresence();
+	});
 });
