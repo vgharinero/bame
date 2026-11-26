@@ -1168,7 +1168,9 @@ export const createBameClient = (
 			group.activeStream?.abort();
 			group.activeStream = undefined;
 			options.signal?.removeEventListener('abort', group.onClientAbort);
-			streamGroups.delete(group.identityKey);
+			if (streamGroups.get(group.identityKey) === group) {
+				streamGroups.delete(group.identityKey);
+			}
 			return;
 		}
 		const channels = [
@@ -1216,7 +1218,9 @@ export const createBameClient = (
 					created.activeStream?.abort();
 					created.activeStream = undefined;
 					created.subs.clear();
-					streamGroups.delete(identityKey);
+					if (streamGroups.get(identityKey) === created) {
+						streamGroups.delete(identityKey);
+					}
 				},
 			};
 			options.signal?.addEventListener('abort', created.onClientAbort, {
@@ -1225,29 +1229,27 @@ export const createBameClient = (
 			streamGroups.set(identityKey, created);
 			group = created;
 		}
+		const targetGroup = group;
 		const id = nextSubscriberId++;
-		group.subs.set(id, {
+		targetGroup.subs.set(id, {
 			id,
 			channel,
 			callback: callback as (payload: unknown) => void | Promise<void>,
 			subscription,
 		});
-		scheduleSync(group);
+		scheduleSync(targetGroup);
 		return () => {
-			const currentGroup = streamGroups.get(identityKey);
-			if (!currentGroup) return;
-			currentGroup.subs.delete(id);
-			if (currentGroup.subs.size === 0) {
-				currentGroup.activeStream?.abort();
-				currentGroup.activeStream = undefined;
-				options.signal?.removeEventListener(
-					'abort',
-					currentGroup.onClientAbort,
-				);
-				streamGroups.delete(identityKey);
+			targetGroup.subs.delete(id);
+			if (targetGroup.subs.size === 0) {
+				targetGroup.activeStream?.abort();
+				targetGroup.activeStream = undefined;
+				options.signal?.removeEventListener('abort', targetGroup.onClientAbort);
+				if (streamGroups.get(identityKey) === targetGroup) {
+					streamGroups.delete(identityKey);
+				}
 				return;
 			}
-			scheduleSync(currentGroup);
+			scheduleSync(targetGroup);
 		};
 	};
 

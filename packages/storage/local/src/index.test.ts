@@ -58,4 +58,30 @@ describe('@bame/storage-local', () => {
 			fs.rmSync(dir, { recursive: true, force: true });
 		}
 	});
+
+	it('recovers a pre-boot lock file even when its PID has been reused by an active process', async () => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'bame-stale-lock-'));
+		const file = path.join(dir, 'store.json');
+		const lock = `${file}.lock`;
+		fs.writeFileSync(
+			lock,
+			JSON.stringify({ pid: process.pid, id: 'old-boot-lock' }),
+		);
+		const preBoot = new Date(Date.now() - (os.uptime() + 60) * 1000);
+		fs.utimesSync(lock, preBoot, preBoot);
+		const storage = localFileStorage({ file });
+		try {
+			await storage.create('profiles', {
+				id: 'p1',
+				version: 1,
+				displayName: 'GinHero',
+			});
+			expect(await storage.get('profiles', 'p1')).toMatchObject({
+				displayName: 'GinHero',
+			});
+		} finally {
+			await storage.close();
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	});
 });

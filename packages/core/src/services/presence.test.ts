@@ -229,4 +229,69 @@ describe('presence service & remote transport', () => {
 		stopNotifications();
 		stopPresence();
 	});
+
+	it('does not orphan or split muxed groups after synchronous StrictMode mount/unmount/remount', async () => {
+		const bame = createBame({ games: [dummyGame] });
+		const handler = createBameHandler(bame, { unsafeTrustClientIds: true });
+		const getUrls: string[] = [];
+		const aliceFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+			if (!init?.method || init.method === 'GET') getUrls.push(String(input));
+			return handler.fetch(new Request(input, init));
+		};
+		const alice = createBameClient({
+			url: 'http://localhost/api/bame',
+			userId: 'alice',
+			fetch: aliceFetch,
+		});
+		const lobby = await alice.lobbies.create({
+			userId: 'alice',
+			game: dummyGame.name,
+		});
+		const bob = createBameClient({
+			url: 'http://localhost/api/bame',
+			userId: 'bob',
+			fetch: (input, init) => handler.fetch(new Request(input, init)),
+		});
+		await bob.lobbies.join({ userId: 'bob', lobbyId: lobby.id });
+		const match = await alice.lobbies.start({
+			userId: 'alice',
+			lobbyId: lobby.id,
+		});
+
+		// Simulate React StrictMode mount -> cleanup -> remount in same synchronous turn
+		const m1 = alice.matches.subscribe(match.id, 'alice', () => {});
+		m1();
+		let matchReady = 0;
+		const m2 = alice.matches.subscribe(match.id, 'alice', () => {}, {
+			onReady: () => void matchReady++,
+		});
+		await vi.waitFor(() => expect(matchReady).toBe(1));
+
+		// Mounting notifications afterwards must upgrade the SAME muxed group (not open a separate stream)
+		const n1 = alice.matches.subscribeNotifications('alice', () => {}, {
+			userId: 'alice',
+		});
+		n1();
+		let notifReady = 0;
+		const n2 = alice.matches.subscribeNotifications('alice', () => {}, {
+			userId: 'alice',
+			onReady: () => void notifReady++,
+		});
+		await vi.waitFor(() => expect(notifReady).toBe(1));
+
+		expect(
+			getUrls.some(
+				(u) =>
+					u.includes('mux=1') &&
+					u.includes(`match%3A${match.id}`) &&
+					u.includes('notifications'),
+			),
+		).toBe(true);
+		expect(
+			getUrls.some((u) => u.includes('notifications') && !u.includes('mux=1')),
+		).toBe(false);
+
+		m2();
+		n2();
+	});
 });

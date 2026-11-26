@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
 	type CollectionName,
@@ -31,20 +32,25 @@ export const localFileStorage = (
 	options: LocalFileStorageOptions,
 ): LocalFileStorage => {
 	const file = path.resolve(options.file);
-	const stores = options.reuseInProcess
-		? (registryState[registryKey] ??= new Map())
-		: undefined;
+	let stores: Map<string, LocalFileStorage> | undefined;
+	if (options.reuseInProcess) {
+		if (!registryState[registryKey]) registryState[registryKey] = new Map();
+		stores = registryState[registryKey];
+	}
 	const existing = stores?.get(file);
 	if (existing) return existing;
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	const lock = `${file}.lock`;
 	if (fs.existsSync(lock)) {
 		const owner = JSON.parse(fs.readFileSync(lock, 'utf8')) as { pid: number };
-		let alive = true;
-		try {
-			process.kill(owner.pid, 0);
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === 'ESRCH') alive = false;
+		const bootTimeMs = Date.now() - os.uptime() * 1000;
+		let alive = fs.statSync(lock).mtimeMs >= bootTimeMs;
+		if (alive) {
+			try {
+				process.kill(owner.pid, 0);
+			} catch (error) {
+				if ((error as NodeJS.ErrnoException).code === 'ESRCH') alive = false;
+			}
 		}
 		if (alive) throw new Error('Storage file already has an active writer');
 		fs.unlinkSync(lock);
